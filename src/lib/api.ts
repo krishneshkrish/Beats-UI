@@ -19,7 +19,7 @@ export const getRecommendations = async (mood: string, limit = 10): Promise<Song
   const response = await api.get(`/api/recommendations`, {
     params: { mood, limit },
   });
-  return response.data;
+  return Array.isArray(response.data) ? response.data : (response.data?.songs || response.data || []);
 };
 
 export const logPlay = async (payload: {
@@ -36,7 +36,7 @@ export const getAiRecommendations = async (context = 'discover'): Promise<Song[]
   const response = await api.get('/api/recommendations/ai', {
     params: { context },
   });
-  return response.data;
+  return Array.isArray(response.data) ? response.data : (response.data?.songs || response.data || []);
 };
 
 export const getAnalyticsSummary = async (): Promise<AnalyticsSummary> => {
@@ -65,25 +65,21 @@ export const searchAPI = async (q: string, type?: string): Promise<SearchResult>
 };
 
 export const searchMedia = async (q: string, source: string, limit = 6): Promise<Song[]> => {
-  if (!API_BASE_URL) {
-    const response = await api.get('/api/search', { params: { q } });
-    return response.data.songs || [];
-  }
-  const response = await api.get('/api/yt/search', {
-    params: { q, source, limit },
-  });
-  return response.data;
+  const response = !API_BASE_URL
+    ? await api.get('/api/search', { params: { q } })
+    : await api.get('/api/yt/search', { params: { q, source, limit } });
+  
+  const data = response.data;
+  return Array.isArray(data) ? data : (data?.songs || data || []);
 };
 
 export const getTrending = async (mood: string): Promise<Song[]> => {
-  if (!API_BASE_URL) {
-    const response = await api.get('/api/recommendations', { params: { mood } });
-    return response.data || [];
-  }
-  const response = await api.get('/api/yt/trending', {
-    params: { mood },
-  });
-  return response.data;
+  const response = !API_BASE_URL
+    ? await api.get('/api/recommendations', { params: { mood } })
+    : await api.get('/api/yt/trending', { params: { mood } });
+  
+  const data = response.data;
+  return Array.isArray(data) ? data : (data?.songs || data || []);
 };
 
 export const refreshStreamUrl = async (id: string, source = 'youtube'): Promise<{ url: string }> => {
