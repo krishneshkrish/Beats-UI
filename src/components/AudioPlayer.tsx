@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePlayerStore } from '@/store/useStore';
 import { refreshStreamUrl, api } from '@/lib/api';
-import ReactPlayer from 'react-player';
+import ReactPlayer from 'react-player/youtube';
 
 export default function AudioPlayer() {
   const [isMounted, setIsMounted] = useState(false);
-  const playerRef = useRef<HTMLVideoElement | null>(null);
+  const playerRef = useRef<ReactPlayer | null>(null);
   const retryCountRef = useRef<Record<string, number>>({});
   
   const {
@@ -37,7 +37,7 @@ export default function AudioPlayer() {
   // Handle seek requests from the store
   useEffect(() => {
     if (seekToTime !== null && playerRef.current) {
-      playerRef.current.currentTime = seekToTime;
+      playerRef.current.seekTo(seekToTime, 'seconds');
       seekTo(null);
     }
   }, [seekToTime, seekTo]);
@@ -131,9 +131,8 @@ export default function AudioPlayer() {
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   }, [isPlaying]);
 
-  const handleDurationChange = () => {
-    if (!playerRef.current || !currentSong) return;
-    const duration = playerRef.current.duration;
+  const handleDuration = (duration: number) => {
+    if (!currentSong) return;
     if (duration && currentSong.duration !== duration) {
       usePlayerStore.setState((state) => {
         if (state.currentSong && state.currentSong.id === currentSong.id) {
@@ -149,15 +148,15 @@ export default function AudioPlayer() {
     }
   };
 
-  const handleTimeUpdate = () => {
-    if (!playerRef.current || !currentSong) return;
-    const progress = playerRef.current.currentTime;
+  const handleProgress = (state: { playedSeconds: number }) => {
+    if (!currentSong) return;
+    const progress = state.playedSeconds;
     setProgress(progress);
 
     // Dynamic linear calculation to sync lyrics lines
     if (currentSong.lyrics && currentSong.lyrics.length > 0) {
       const totalLines = currentSong.lyrics.length;
-      const duration = currentSong.duration || playerRef.current.duration || 1;
+      const duration = currentSong.duration || 1;
       const activeLine = Math.min(
         Math.floor((progress / duration) * totalLines),
         totalLines - 1
@@ -216,7 +215,7 @@ export default function AudioPlayer() {
   return (
     <ReactPlayer
       ref={playerRef}
-      src={currentSong?.url || ''}
+      url={currentSong?.url || ''}
       playing={isPlaying}
       volume={volume}
       muted={isMuted}
@@ -225,12 +224,12 @@ export default function AudioPlayer() {
           retryCountRef.current[currentSong.id] = 0;
         }
       }}
-      onDurationChange={handleDurationChange}
-      onTimeUpdate={handleTimeUpdate}
+      onDuration={handleDuration}
+      onProgress={handleProgress}
       onEnded={handleEnded}
       onError={handleError}
-      width="0"
-      height="0"
+      width="0px"
+      height="0px"
       style={{
         position: 'absolute',
         width: '1px',
