@@ -1,0 +1,98 @@
+import axios from 'axios';
+import { GreetingResponse, Song, AnalyticsSummary, TimelineItem, SearchResult } from '../types';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
+export const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export const getGreeting = async (): Promise<GreetingResponse> => {
+  const response = await api.get('/api/greeting');
+  return response.data;
+};
+
+export const getRecommendations = async (mood: string, limit = 10): Promise<Song[]> => {
+  const response = await api.get(`/api/recommendations`, {
+    params: { mood, limit },
+  });
+  return response.data;
+};
+
+export const logPlay = async (payload: {
+  song_id: string;
+  mood_tag: string;
+  timestamp: string;
+  session_id: string;
+}): Promise<{ status: string }> => {
+  const response = await api.post('/api/log/play', payload);
+  return response.data;
+};
+
+export const getAiRecommendations = async (context = 'discover'): Promise<Song[]> => {
+  const response = await api.get('/api/recommendations/ai', {
+    params: { context },
+  });
+  return response.data;
+};
+
+export const getAnalyticsSummary = async (): Promise<AnalyticsSummary> => {
+  const response = await api.get('/api/analytics/summary');
+  return response.data;
+};
+
+export const getJourneyTimeline = async (): Promise<TimelineItem[]> => {
+  const response = await api.get('/api/journey/timeline');
+  return response.data;
+};
+
+export const setMoodAPI = async (mood: string): Promise<{ status: string; mood: string }> => {
+  const response = await api.post('/api/mood/set', {
+    mood,
+    timestamp: new Date().toISOString(),
+  });
+  return response.data;
+};
+
+export const searchAPI = async (q: string, type?: string): Promise<SearchResult> => {
+  const response = await api.get('/api/search', {
+    params: { q, type },
+  });
+  return response.data;
+};
+
+export const searchMedia = async (q: string, source: string, limit = 6): Promise<Song[]> => {
+  if (!API_BASE_URL) {
+    const response = await api.get('/api/search', { params: { q } });
+    return response.data.songs || [];
+  }
+  const response = await api.get('/api/yt/search', {
+    params: { q, source, limit },
+  });
+  return response.data;
+};
+
+export const getTrending = async (mood: string): Promise<Song[]> => {
+  if (!API_BASE_URL) {
+    const response = await api.get('/api/recommendations', { params: { mood } });
+    return response.data || [];
+  }
+  const response = await api.get('/api/yt/trending', {
+    params: { mood },
+  });
+  return response.data;
+};
+
+export const refreshStreamUrl = async (id: string, source = 'youtube'): Promise<{ url: string }> => {
+  if (!API_BASE_URL) {
+    return { url: '' };
+  }
+  const response = await api.get('/api/yt/refresh', {
+    params: { video_id: id, source },
+  });
+  return response.data;
+};
+
