@@ -28,6 +28,12 @@ export const logPlay = async (payload: {
   timestamp: string;
   session_id: string;
   username?: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  artwork?: string;
+  duration?: number;
+  url?: string;
 }): Promise<{ status: string }> => {
   const response = await api.post('/api/log', payload);
   return response.data;

@@ -63,6 +63,12 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
         timestamp: new Date().toISOString(),
         session_id: SESSION_ID,
         username: username || '',
+        title: currentSong.title || '',
+        artist: currentSong.artist || '',
+        album: currentSong.album || 'YouTube Stream',
+        artwork: currentSong.artwork || '',
+        duration: currentSong.duration || 0,
+        url: currentSong.url || '',
       };
 
       api.post('/api/log', payload)
