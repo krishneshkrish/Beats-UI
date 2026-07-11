@@ -43,6 +43,19 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
           : (data?.songs || data?.history || data?.data || []);
         
         setRecentlyPlayed(songs);
+
+        // On boot/refresh, load the first song from history as the inactive (paused) player state if empty
+        if (songs.length > 0) {
+          const { currentSong: activeSong } = usePlayerStore.getState();
+          if (!activeSong) {
+            usePlayerStore.setState({
+              currentSong: songs[0],
+              isPlaying: false,
+              progress: 0,
+              queue: songs,
+            });
+          }
+        }
       } catch (err) {
         console.error('Failed to hydrate history:', err);
       }

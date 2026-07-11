@@ -15,17 +15,20 @@ import {
 import { getJourneyTimeline } from '@/lib/api';
 import { usePlayerStore } from '@/store/useStore';
 import { TimelineItem } from '@/types';
+import { useAuth } from '@/context/AuthContext';
 
 export default function JourneyView() {
   const { playTrack } = usePlayerStore();
+  const { username } = useAuth();
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!username) return;
     async function loadJourney() {
       try {
         setLoading(true);
-        const res = await getJourneyTimeline();
+        const res = await getJourneyTimeline(username);
         setTimeline(res);
       } catch (err) {
         console.error('Failed to load journey timeline', err);
@@ -34,7 +37,7 @@ export default function JourneyView() {
       }
     }
     loadJourney();
-  }, []);
+  }, [username]);
 
   const getSectionIcon = (label: string) => {
     switch (label) {

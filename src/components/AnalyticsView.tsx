@@ -14,6 +14,7 @@ import {
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { getAnalyticsSummary } from '@/lib/api';
 import { AnalyticsSummary } from '@/types';
+import { useAuth } from '@/context/AuthContext';
 
 // Harmonious black, white, and red color palette for the luxury donut chart
 const COLORS = [
@@ -25,14 +26,16 @@ const COLORS = [
 ];
 
 export default function AnalyticsView() {
+  const { username } = useAuth();
   const [data, setData] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!username) return;
     async function loadAnalytics() {
       try {
         setLoading(true);
-        const res = await getAnalyticsSummary();
+        const res = await getAnalyticsSummary(username);
         setData(res);
       } catch (err) {
         console.error('Failed to load analytics data', err);
@@ -41,7 +44,7 @@ export default function AnalyticsView() {
       }
     }
     loadAnalytics();
-  }, []);
+  }, [username]);
 
   if (loading) {
     return (

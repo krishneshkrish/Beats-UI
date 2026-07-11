@@ -53,8 +53,10 @@ export const getAnalyticsSummary = async (username?: string): Promise<AnalyticsS
   return response.data;
 };
 
-export const getJourneyTimeline = async (): Promise<TimelineItem[]> => {
-  const response = await api.get('/api/journey/timeline');
+export const getJourneyTimeline = async (username?: string): Promise<TimelineItem[]> => {
+  const response = await api.get('/api/journey/timeline', {
+    params: { username },
+  });
   return response.data;
 };
 
