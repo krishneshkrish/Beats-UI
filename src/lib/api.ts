@@ -15,9 +15,9 @@ export const getGreeting = async (): Promise<GreetingResponse> => {
   return response.data;
 };
 
-export const getRecommendations = async (mood: string, limit = 10): Promise<Song[]> => {
+export const getRecommendations = async (mood: string, limit = 10, username?: string): Promise<Song[]> => {
   const response = await api.get(`/api/recommendations`, {
-    params: { mood, limit },
+    params: { mood, limit, username },
   });
   return Array.isArray(response.data) ? response.data : (response.data?.songs || response.data || []);
 };
@@ -27,20 +27,23 @@ export const logPlay = async (payload: {
   mood_tag: string;
   timestamp: string;
   session_id: string;
+  username?: string;
 }): Promise<{ status: string }> => {
-  const response = await api.post('/api/log/play', payload);
+  const response = await api.post('/api/log', payload);
   return response.data;
 };
 
 export const getAiRecommendations = async (context = 'discover'): Promise<Song[]> => {
-  const response = await api.get('/api/recommendations/ai', {
+  const response = await api.get('/api/recommendations-ai', {
     params: { context },
   });
   return Array.isArray(response.data) ? response.data : (response.data?.songs || response.data || []);
 };
 
-export const getAnalyticsSummary = async (): Promise<AnalyticsSummary> => {
-  const response = await api.get('/api/analytics/summary');
+export const getAnalyticsSummary = async (username?: string): Promise<AnalyticsSummary> => {
+  const response = await api.get('/api/analytics/summary', {
+    params: { username },
+  });
   return response.data;
 };
 

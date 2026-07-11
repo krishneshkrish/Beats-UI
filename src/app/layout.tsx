@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { AuthProvider } from '@/context/AuthContext';
+import { AudioProvider } from '@/context/AudioContext';
 
 export const metadata: Metadata = {
   title: 'Beats — Premium AI Music PWA',
@@ -29,7 +31,11 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon.png" />
       </head>
       <body className="antialiased bg-black">
-        {children}
+        <AuthProvider>
+          <AudioProvider>
+            {children}
+          </AudioProvider>
+        </AuthProvider>
       </body>
     </html>
   );

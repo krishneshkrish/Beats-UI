@@ -3,45 +3,34 @@
 import { useEffect, useState } from 'react';
 import { Play, Shuffle, Disc, Heart, Plus, Music, Sparkles } from 'lucide-react';
 import { usePlayerStore, useMoodStore } from '@/store/useStore';
-import { getGreeting, getRecommendations, getTrending, getJourneyTimeline } from '@/lib/api';
+import { getGreeting, getRecommendations, getTrending } from '@/lib/api';
 import { Song, GreetingResponse } from '@/types';
+import { useAuth } from '@/context/AuthContext';
+import { useAudio } from '@/context/AudioContext';
 
 export default function HomeView() {
   const { activeMood } = useMoodStore();
   const { playTrack, currentSong, isPlaying, togglePlay } = usePlayerStore();
+  const { username } = useAuth();
+  const { recentlyPlayed } = useAudio();
 
   const [greeting, setGreeting] = useState<GreetingResponse | null>(null);
   const [recommendations, setRecommendations] = useState<Song[]>([]);
   const [trending, setTrending] = useState<Song[]>([]);
-  const [recentlyPlayed, setRecentlyPlayed] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true);
-        const [greetRes, recRes, trendRes, timelineRes] = await Promise.all([
+        const [greetRes, recRes, trendRes] = await Promise.all([
           getGreeting(),
-          getRecommendations(activeMood, 10),
+          getRecommendations(activeMood, 10, username),
           getTrending(activeMood),
-          getJourneyTimeline().catch(() => []),
         ]);
         setGreeting(greetRes);
         setRecommendations(recRes);
         setTrending(trendRes);
-
-        const recentSongs: Song[] = [];
-        const seenIds = new Set<string>();
-        if (timelineRes && Array.isArray(timelineRes)) {
-          for (const item of timelineRes) {
-            if (item.song && !seenIds.has(item.song.id)) {
-              seenIds.add(item.song.id);
-              recentSongs.push(item.song);
-              if (recentSongs.length >= 3) break;
-            }
-          }
-        }
-        setRecentlyPlayed(recentSongs);
       } catch (error) {
         console.error('Error loading home view data:', error);
       } finally {
@@ -49,7 +38,7 @@ export default function HomeView() {
       }
     }
     loadData();
-  }, [activeMood]);
+  }, [activeMood, username]);
 
   const handleContinueListening = () => {
     if (currentSong) {

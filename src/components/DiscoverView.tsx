@@ -5,6 +5,7 @@ import { Play, Sparkles, Flame, Calendar, Music } from 'lucide-react';
 import { usePlayerStore } from '@/store/useStore';
 import { getAiRecommendations, getRecommendations } from '@/lib/api';
 import { Song } from '@/types';
+import { useAuth } from '@/context/AuthContext';
 
 interface FeaturedItem {
   id: string;
@@ -33,6 +34,7 @@ const FEATURED_ITEMS: FeaturedItem[] = [
 
 export default function DiscoverView() {
   const { playTrack } = usePlayerStore();
+  const { username } = useAuth();
   const [aiPicks, setAiPicks] = useState<Song[]>([]);
   const [trending, setTrending] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +45,7 @@ export default function DiscoverView() {
         setLoading(true);
         const [aiRes, trendRes] = await Promise.all([
           getAiRecommendations('discover'),
-          getRecommendations('Chill', 6) // pull chill songs as placeholders for trending
+          getRecommendations('Chill', 6, username) // pull chill songs as placeholders for trending
         ]);
         setAiPicks(aiRes);
         setTrending(trendRes);
@@ -54,7 +56,7 @@ export default function DiscoverView() {
       }
     }
     loadDiscoverData();
-  }, []);
+  }, [username]);
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 pt-8 pb-32 font-sans text-[#F5F5F7]">

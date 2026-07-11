@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Song, TimelineItem } from '../types';
-import { setMoodAPI, logPlay } from '../lib/api';
+import { setMoodAPI } from '../lib/api';
 
 const SESSION_ID = typeof window !== 'undefined'
   ? Math.random().toString(36).substring(2, 15)
@@ -59,14 +59,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queue: finalQueue,
       lyricsActiveLine: 0
     });
-
-    const moodStore = useMoodStore.getState();
-    logPlay({
-      song_id: song.id,
-      mood_tag: moodStore.activeMood || 'Chill',
-      timestamp: new Date().toISOString(),
-      session_id: SESSION_ID,
-    }).catch(err => console.error('Failed to log play', err));
   },
 
   togglePlay: () => set(state => ({ isPlaying: !state.isPlaying })),
@@ -106,12 +98,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const nextSong = queue[nextIndex];
     if (nextSong) {
       set({ currentSong: nextSong, progress: 0, isPlaying: true, lyricsActiveLine: 0 });
-      logPlay({
-        song_id: nextSong.id,
-        mood_tag: useMoodStore.getState().activeMood || 'Chill',
-        timestamp: new Date().toISOString(),
-        session_id: SESSION_ID,
-      }).catch(err => console.error('Failed to log play', err));
     }
   },
 
@@ -136,12 +122,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const prevSong = queue[prevIndex];
     if (prevSong) {
       set({ currentSong: prevSong, progress: 0, isPlaying: true, lyricsActiveLine: 0 });
-      logPlay({
-        song_id: prevSong.id,
-        mood_tag: useMoodStore.getState().activeMood || 'Chill',
-        timestamp: new Date().toISOString(),
-        session_id: SESSION_ID,
-      }).catch(err => console.error('Failed to log play', err));
     }
   },
 

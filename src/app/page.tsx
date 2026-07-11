@@ -2,6 +2,7 @@
 
 import { useNavigationStore } from '@/store/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@/context/AuthContext';
 
 // Views
 import HomeView from '@/components/HomeView';
@@ -16,9 +17,15 @@ import ProfileView from '@/components/ProfileView';
 // Core controllers
 import AudioPlayer from '@/components/AudioPlayer';
 import DynamicIsland from '@/components/DynamicIsland';
+import LoginView from '@/components/LoginView';
 
 export default function AppContainer() {
   const { activeTab } = useNavigationStore();
+  const { username } = useAuth();
+
+  if (!username) {
+    return <LoginView />;
+  }
 
   const renderActiveView = () => {
     switch (activeTab) {

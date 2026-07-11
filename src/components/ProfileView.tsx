@@ -14,9 +14,46 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { useUserStore } from '@/store/useStore';
+import { useAuth } from '@/context/AuthContext';
+import { getAnalyticsSummary } from '@/lib/api';
 
 export default function ProfileView() {
   const { profile, stats, badges } = useUserStore();
+  const { username, logout } = useAuth();
+  
+  const [realtimeStats, setRealtimeStats] = useState(stats);
+  const [realtimeStreak, setRealtimeStreak] = useState(profile.streak);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!username) return;
+
+    let active = true;
+    async function fetchStats() {
+      try {
+        setLoading(true);
+        const data = await getAnalyticsSummary(username);
+        if (data && active) {
+          setRealtimeStats({
+            totalHours: data.totalTime / 60,
+            weeklyMinutes: data.weeklyTime,
+            topArtist: data.topArtist,
+            topSong: data.topSong,
+          });
+          setRealtimeStreak(data.streak);
+        }
+      } catch (err) {
+        console.error('Failed to fetch user analytics', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    fetchStats();
+
+    return () => {
+      active = false;
+    };
+  }, [username]);
   
   // PWA installation state
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -78,21 +115,27 @@ export default function ProfileView() {
           ) : (
             <div className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center backdrop-blur-md shadow-[inset_0_1px_2px_rgba(255,255,255,0.2)]">
               <span className="text-3xl font-bold text-white tracking-wider">
-                {profile.name ? profile.name.charAt(0).toUpperCase() : 'K'}
+                {(username || profile.name || 'K').charAt(0).toUpperCase()}
               </span>
             </div>
           )}
         </div>
 
         {/* User text */}
-        <div className="flex-1 space-y-1.5 text-center md:text-left">
-          <div className="flex flex-col md:flex-row md:items-center gap-2">
+        <div className="flex-1 space-y-1.5 text-center md:text-left w-full">
+          <div className="flex flex-col md:flex-row md:items-center gap-2 w-full">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-glass">
-              {profile.name}
+              {username || profile.name}
             </h1>
             <span className="text-[10px] font-bold tracking-wider text-[#FF3B30] uppercase bg-[#FF3B30]/15 px-2.5 py-0.5 rounded-full self-center md:self-auto">
               PRO LISTENER
             </span>
+            <button
+              onClick={logout}
+              className="text-[10px] font-bold tracking-wider text-white/40 hover:text-[#FF3B30] hover:bg-[#FF3B30]/10 uppercase bg-white/5 px-3 py-1 rounded-full transition md:ml-auto self-center md:self-auto cursor-pointer"
+            >
+              Logout
+            </button>
           </div>
           
           <p className="text-xs text-white/50 font-light max-w-md leading-relaxed">
@@ -102,10 +145,14 @@ export default function ProfileView() {
           <div className="flex items-center justify-center md:justify-start space-x-4 pt-1">
             <div className="flex items-center space-x-1">
               <Flame className="w-4 h-4 text-[#FF3B30] fill-[#FF3B30]" />
-              <span className="text-xs font-semibold text-white">{profile.streak} Day Streak</span>
+              <span className="text-xs font-semibold text-white">
+                {loading ? '...' : `${realtimeStreak} Day Streak`}
+              </span>
             </div>
             <div className="w-1.5 h-1.5 rounded-full bg-white/10" />
-            <span className="text-xs text-white/50">{Math.round(stats.totalHours)} Hours Listened</span>
+            <span className="text-xs text-white/50">
+              {loading ? '...' : `${Math.round(realtimeStats.totalHours)} Hours Listened`}
+            </span>
           </div>
         </div>
       </div>
