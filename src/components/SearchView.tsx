@@ -14,6 +14,43 @@ export default function SearchView() {
   const [results, setResults] = useState<Song[]>([]);
   const [trending, setTrending] = useState<Song[]>([]);
   const [loading, setLoading] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+  // Load recent searches from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = window.localStorage.getItem('beats_recent_searches');
+        if (cached) {
+          setRecentSearches(JSON.parse(cached));
+        }
+      } catch (err) {
+        console.error('Failed to load recent searches', err);
+      }
+    }
+  }, []);
+
+  const saveSearch = (searchQuery: string) => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
+    setRecentSearches((prev) => {
+      const updated = [trimmed, ...prev.filter(s => s !== trimmed)].slice(0, 5);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('beats_recent_searches', JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
+
+  const removeSearch = (searchQuery: string) => {
+    setRecentSearches((prev) => {
+      const updated = prev.filter(s => s !== searchQuery);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('beats_recent_searches', JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
 
   // Load trending suggestions when search query is empty
   useEffect(() => {
@@ -68,6 +105,7 @@ export default function SearchView() {
   };
 
   const handlePlay = async (song: Song, allResults: Song[]) => {
+    saveSearch(query);
     // Play the song immediately — don't wait for queue
     usePlayerStore.getState().playTrack(song, [song]);
 
@@ -105,6 +143,11 @@ export default function SearchView() {
             placeholder="Search tracks, artists, or keywords..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                saveSearch(query);
+              }
+            }}
             className="relative z-10 w-full h-full rounded-full pl-14 pr-12 bg-transparent text-sm font-medium border-none outline-none text-white placeholder-white/35 tracking-wide"
           />
 
@@ -143,6 +186,39 @@ export default function SearchView() {
           SoundCloud
         </button>
       </div>
+
+      {/* 2.5 Recent Searches */}
+      {!isSearching && recentSearches.length > 0 && (
+        <div className="mb-8 animate-fade-in text-left">
+          <h4 className="text-xs font-bold tracking-wider uppercase text-white/40 pl-1 mb-3">
+            Recent Searches
+          </h4>
+          <div className="flex flex-wrap gap-2.5">
+            {recentSearches.map((search, idx) => (
+              <div
+                key={idx}
+                className="flex items-center space-x-2 px-3 py-1.5 rounded-full glass-card hover:bg-white/10 transition border border-white/5 cursor-pointer text-xs font-medium text-white/80"
+                onClick={() => {
+                  setQuery(search);
+                  saveSearch(search);
+                }}
+              >
+                <span>{search}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeSearch(search);
+                  }}
+                  className="p-0.5 rounded-full hover:bg-white/15 text-white/40 hover:text-white transition"
+                  aria-label={`Remove search ${search}`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 3. Main List Content */}
       {loading ? (
