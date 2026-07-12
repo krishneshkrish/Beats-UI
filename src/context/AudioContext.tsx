@@ -70,6 +70,11 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
       navigator.mediaSession.setActionHandler('previoustrack', () => {
         prevTrack();
       });
+
+      // Explicitly disable seek actions to override YouTube iframe registrations and force iOS next/prev buttons
+      navigator.mediaSession.setActionHandler('seekforward', null);
+      navigator.mediaSession.setActionHandler('seekbackward', null);
+      navigator.mediaSession.setActionHandler('seekto', null);
     } catch (err) {
       console.error('Failed to configure Media Session metadata/handlers:', err);
     }
