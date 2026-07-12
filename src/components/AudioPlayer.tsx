@@ -99,37 +99,7 @@ export default function AudioPlayer() {
     });
   }, [currentSong]);
 
-  // Sync with Media Session API for lock screen and notification control cards
-  useEffect(() => {
-    if (!currentSong || !('mediaSession' in navigator)) return;
 
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: currentSong.title,
-      artist: currentSong.artist,
-      album: currentSong.album,
-      artwork: [
-        { src: currentSong.artwork, sizes: '512x512', type: 'image/jpeg' }
-      ]
-    });
-
-    navigator.mediaSession.setActionHandler('play', () => {
-      usePlayerStore.getState().setIsPlaying(true);
-    });
-    navigator.mediaSession.setActionHandler('pause', () => {
-      usePlayerStore.getState().setIsPlaying(false);
-    });
-    navigator.mediaSession.setActionHandler('nexttrack', () => {
-      usePlayerStore.getState().nextTrack();
-    });
-    navigator.mediaSession.setActionHandler('previoustrack', () => {
-      usePlayerStore.getState().prevTrack();
-    });
-  }, [currentSong]);
-
-  useEffect(() => {
-    if (!('mediaSession' in navigator)) return;
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-  }, [isPlaying]);
 
   const handleDuration = (duration: number) => {
     if (!currentSong) return;

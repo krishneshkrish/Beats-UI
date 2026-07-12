@@ -15,6 +15,7 @@
     "@capacitor/core": "^8.4.1",
     "@capacitor/ios": "^8.4.1",
     "axios": "^1.17.0",
+    "capacitor-background-mode": "npm:@anuradev/capacitor-background-mode@^7.2.1",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.17.0",
     "next": "14.2.35",

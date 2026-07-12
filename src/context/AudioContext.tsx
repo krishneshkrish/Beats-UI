@@ -5,6 +5,7 @@ import { useAuth } from './AuthContext';
 import { usePlayerStore, useMoodStore } from '@/store/useStore';
 import { Song } from '@/types';
 import { api } from '@/lib/api';
+import { BackgroundMode } from 'capacitor-background-mode';
 
 const SESSION_ID = typeof window !== 'undefined'
   ? Math.random().toString(36).substring(2, 15)
@@ -20,8 +21,59 @@ const AudioContext = createContext<AudioContextType | undefined>(undefined);
 export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
   const { username } = useAuth();
   const [recentlyPlayed, setRecentlyPlayed] = useState<Song[]>([]);
-  const { currentSong } = usePlayerStore();
+  const { currentSong, isPlaying } = usePlayerStore();
   const lastLoggedSongId = useRef<string | null>(null);
+
+  // Enable Background Persistence on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        BackgroundMode.enable({});
+      } catch (err) {
+        console.error('Failed to enable Capacitor Background Mode:', err);
+      }
+    }
+  }, []);
+
+  // Sync mediaSession playbackState
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    }
+  }, [isPlaying]);
+
+  // Sync with Media Session API for lock screen and background control
+  useEffect(() => {
+    if (!currentSong || typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentSong.title,
+        artist: currentSong.artist,
+        album: currentSong.album || 'YouTube Stream',
+        artwork: [
+          { src: currentSong.artwork, sizes: '512x512', type: 'image/jpeg' }
+        ]
+      });
+
+      const { togglePlay, nextTrack, prevTrack } = usePlayerStore.getState();
+
+      navigator.mediaSession.setActionHandler('play', () => {
+        togglePlay();
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        togglePlay();
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        nextTrack();
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        prevTrack();
+      });
+    } catch (err) {
+      console.error('Failed to configure Media Session metadata/handlers:', err);
+    }
+  }, [currentSong]);
 
   // Implement History Hydration on Boot / Username change
   useEffect(() => {
