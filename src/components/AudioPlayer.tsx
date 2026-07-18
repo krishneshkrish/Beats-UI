@@ -259,17 +259,17 @@ export default function AudioPlayer() {
       onProgress={handleProgress}
       onEnded={handleEnded}
       onError={handleError}
-      width="0px"
-      height="0px"
+      width="10px"
+      height="10px"
       style={{
-        position: 'absolute',
-        width: '1px',
-        height: '1px',
-        padding: '0',
-        margin: '-1px',
-        overflow: 'hidden',
-        clip: 'rect(0, 0, 0, 0)',
-        border: '0',
+        position: 'fixed',
+        bottom: '10px',
+        right: '10px',
+        width: '10px',
+        height: '10px',
+        opacity: '0.001',
+        pointerEvents: 'none',
+        zIndex: -9999,
       }}
     />
   );
