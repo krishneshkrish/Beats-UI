@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { usePlayerStore } from '@/store/useStore';
 import { refreshStreamUrl, api } from '@/lib/api';
-import YouTubePlayer from 'react-player/youtube';
 import FilePlayer from 'react-player/file';
 
 export default function AudioPlayer() {
@@ -235,8 +234,8 @@ export default function AudioPlayer() {
 
   if (!isMounted) return null;
 
-  const isYouTube = currentSong?.url ? (currentSong.url.includes('youtube.com') || currentSong.url.includes('youtu.be')) : true;
-  const PlayerComponent = (isYouTube ? YouTubePlayer : FilePlayer) as any;
+  const isYouTube = currentSong?.url ? (currentSong.url.includes('youtube.com') || currentSong.url.includes('youtu.be')) : false;
+  const PlayerComponent = FilePlayer as any;
 
   return (
     <PlayerComponent

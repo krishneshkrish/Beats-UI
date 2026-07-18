@@ -3,6 +3,7 @@
   "short_name": "Beats",
   "description": "Premium AI Music PWA with Liquid Glass UI",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#000000",
