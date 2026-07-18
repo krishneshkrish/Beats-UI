@@ -75,7 +75,7 @@ export const searchAPI = async (q: string, type?: string): Promise<SearchResult>
   return response.data;
 };
 
-export const searchMedia = async (q: string, source: string, limit = 6): Promise<Song[]> => {
+export const searchMedia = async (q: string, source: string, limit = 5): Promise<Song[]> => {
   const response = !API_BASE_URL
     ? await api.get('/api/search', { params: { q } })
     : await api.get('/api/yt/search', { params: { q, source, limit } });
