@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { usePlayerStore } from '@/store/useStore';
 import { refreshStreamUrl, api } from '@/lib/api';
-import ReactPlayer from 'react-player';
+import YouTubePlayer from 'react-player/youtube';
+import FilePlayer from 'react-player/file';
 
 export default function AudioPlayer() {
   const [isMounted, setIsMounted] = useState(false);
-  const playerRef = useRef<ReactPlayer | null>(null);
+  const playerRef = useRef<any>(null);
   const retryCountRef = useRef<Record<string, number>>({});
   
   const {
@@ -234,8 +235,11 @@ export default function AudioPlayer() {
 
   if (!isMounted) return null;
 
+  const isYouTube = currentSong?.url ? (currentSong.url.includes('youtube.com') || currentSong.url.includes('youtu.be')) : true;
+  const PlayerComponent = (isYouTube ? YouTubePlayer : FilePlayer) as any;
+
   return (
-    <ReactPlayer
+    <PlayerComponent
       ref={playerRef}
       url={currentSong?.url || ''}
       playing={isPlaying}
