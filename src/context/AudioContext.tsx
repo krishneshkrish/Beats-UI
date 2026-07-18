@@ -6,6 +6,7 @@ import { usePlayerStore, useMoodStore } from '@/store/useStore';
 import { Song } from '@/types';
 import { api } from '@/lib/api';
 import { BackgroundMode } from 'capacitor-background-mode';
+import { Capacitor } from '@capacitor/core';
 
 const SESSION_ID = typeof window !== 'undefined'
   ? Math.random().toString(36).substring(2, 15)
@@ -24,11 +25,13 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
   const { currentSong, isPlaying } = usePlayerStore();
   const lastLoggedSongId = useRef<string | null>(null);
 
-  // Enable Background Persistence on mount
+  // Enable Background Persistence on mount (native platforms only)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
       try {
-        BackgroundMode.enable({});
+        BackgroundMode.enable({}).catch(err => {
+          console.error('Failed to enable Capacitor Background Mode (promise):', err);
+        });
       } catch (err) {
         console.error('Failed to enable Capacitor Background Mode:', err);
       }
@@ -126,6 +129,12 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
     if (currentSong && currentSong.id !== lastLoggedSongId.current) {
       lastLoggedSongId.current = currentSong.id;
       
+      // Update recentlyPlayed state array OPTIMISTICALLY first
+      setRecentlyPlayed((prev) => {
+        const filtered = prev.filter(s => s.id !== currentSong.id);
+        return [currentSong, ...filtered].slice(0, 10);
+      });
+
       const moodStore = useMoodStore.getState();
       const payload = {
         song_id: currentSong.id,
@@ -141,17 +150,15 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
         url: currentSong.url || '',
       };
 
-      api.post('/api/log', payload)
-        .then(() => {
-          // Instantly prepend the newly played track to recentlyPlayed grid, preventing duplicates
-          setRecentlyPlayed((prev) => {
-            const filtered = prev.filter(s => s.id !== currentSong.id);
-            return [currentSong, ...filtered].slice(0, 10);
-          });
-        })
-        .catch(err => {
-          console.error('Failed to log play payload:', err);
-        });
+      // Run the background analytics API push independently inside a try/catch shield
+      const logPlaySession = async () => {
+        try {
+          await api.post('/api/log', payload);
+        } catch (err) {
+          console.error('Failed to log play payload (background):', err);
+        }
+      };
+      logPlaySession();
     } else if (!currentSong) {
       lastLoggedSongId.current = null;
     }

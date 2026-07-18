@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { usePlayerStore } from '@/store/useStore';
 import { refreshStreamUrl, api } from '@/lib/api';
-import ReactPlayer from 'react-player/youtube';
+import ReactPlayer from 'react-player';
 
 export default function AudioPlayer() {
   const [isMounted, setIsMounted] = useState(false);
@@ -13,6 +13,7 @@ export default function AudioPlayer() {
   const {
     currentSong,
     isPlaying,
+    progress,
     volume,
     isMuted,
     setProgress,
@@ -23,24 +24,59 @@ export default function AudioPlayer() {
     seekTo,
   } = usePlayerStore();
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
-  // Reset progress when currentSong is cleared
-  useEffect(() => {
-    if (!currentSong) {
-      setProgress(0);
-    }
-  }, [currentSong, setProgress]);
+    // Reset progress when currentSong is cleared
+    useEffect(() => {
+        if (!currentSong) {
+            setProgress(0);
+        }
+    }, [currentSong, setProgress]);
 
-  // Handle seek requests from the store
-  useEffect(() => {
-    if (seekToTime !== null && playerRef.current) {
-      playerRef.current.seekTo(seekToTime, 'seconds');
-      seekTo(null);
-    }
-  }, [seekToTime, seekTo]);
+    const syncPositionState = useCallback(() => {
+        if (
+            typeof window !== 'undefined' &&
+            'mediaSession' in navigator &&
+            navigator.mediaSession.setPositionState &&
+            currentSong
+        ) {
+            const duration = currentSong.duration;
+            const progressSec = playerRef.current ? playerRef.current.getCurrentTime() : progress;
+            if (
+                isFinite(duration) &&
+                duration > 0 &&
+                isFinite(progressSec) &&
+                progressSec >= 0 &&
+                progressSec <= duration
+            ) {
+                try {
+                    navigator.mediaSession.setPositionState({
+                        duration: duration,
+                        playbackRate: isPlaying ? 1.0 : 0.0,
+                        position: progressSec,
+                    });
+                } catch (e) {
+                    console.error('Error setting media session position state:', e);
+                }
+            }
+        }
+    }, [currentSong, isPlaying, progress]);
+
+    // Trigger position sync on major status updates (play, pause, current song change)
+    useEffect(() => {
+        syncPositionState();
+    }, [isPlaying, currentSong, syncPositionState]);
+
+    // Handle seek requests from the store
+    useEffect(() => {
+        if (seekToTime !== null && playerRef.current) {
+            playerRef.current.seekTo(seekToTime, 'seconds');
+            seekTo(null);
+            setTimeout(syncPositionState, 50);
+        }
+    }, [seekToTime, seekTo, syncPositionState]);
 
   // Infinite Queue (Non-stop playback)
   useEffect(() => {
@@ -101,43 +137,59 @@ export default function AudioPlayer() {
 
 
 
-  const handleDuration = (duration: number) => {
-    if (!currentSong) return;
-    if (duration && currentSong.duration !== duration) {
-      usePlayerStore.setState((state) => {
-        if (state.currentSong && state.currentSong.id === currentSong.id) {
-          const updatedSong = { ...state.currentSong, duration };
-          const updatedQueue = state.queue.map(s => s.id === currentSong.id ? updatedSong : s);
-          return {
-            currentSong: updatedSong,
-            queue: updatedQueue
-          };
+    const handleDuration = (duration: number) => {
+        if (!currentSong) return;
+        if (duration && currentSong.duration !== duration) {
+            usePlayerStore.setState((state) => {
+                if (state.currentSong && state.currentSong.id === currentSong.id) {
+                    const updatedSong = { ...state.currentSong, duration };
+                    const updatedQueue = state.queue.map(s => s.id === currentSong.id ? updatedSong : s);
+                    return {
+                        currentSong: updatedSong,
+                        queue: updatedQueue
+                    };
+                }
+                return {};
+            });
+            setTimeout(syncPositionState, 50);
         }
-        return {};
-      });
-    }
-  };
+    };
 
-  const handleProgress = (state: { playedSeconds: number }) => {
-    if (!currentSong) return;
-    const progress = state.playedSeconds;
-    setProgress(progress);
+    const handleProgress = (state: { playedSeconds: number }) => {
+        if (!currentSong) return;
+        const progress = state.playedSeconds;
+        setProgress(progress);
 
-    // Dynamic linear calculation to sync lyrics lines
-    if (currentSong.lyrics && currentSong.lyrics.length > 0) {
-      const totalLines = currentSong.lyrics.length;
-      const duration = currentSong.duration || 1;
-      const activeLine = Math.min(
-        Math.floor((progress / duration) * totalLines),
-        totalLines - 1
-      );
-      setLyricsActiveLine(activeLine);
-    }
-  };
+        // Dynamic linear calculation to sync lyrics lines with strict boundary clamps
+        if (currentSong.lyrics && currentSong.lyrics.length > 0) {
+            const totalLines = currentSong.lyrics.length;
+            const duration = currentSong.duration;
+            let activeLine = 0;
+            if (duration && isFinite(duration) && duration > 0 && isFinite(progress)) {
+                activeLine = Math.max(
+                    0,
+                    Math.min(
+                        Math.floor((progress / duration) * totalLines),
+                        totalLines - 1
+                    )
+                );
+            }
+            setLyricsActiveLine(activeLine);
+        }
+    };
 
-  const handleEnded = () => {
-    nextTrack();
-  };
+    const handleEnded = () => {
+        const { isRepeat, seekTo, setProgress: storeSetProgress } = usePlayerStore.getState();
+        if (isRepeat === 'one') {
+            if (playerRef.current) {
+                playerRef.current.seekTo(0, 'seconds');
+            }
+            storeSetProgress(0);
+            setTimeout(syncPositionState, 50);
+        } else {
+            nextTrack();
+        }
+    };
 
   const handleError = async () => {
     if (!currentSong) return;

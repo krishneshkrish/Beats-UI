@@ -16,6 +16,7 @@ import {
 import { useUserStore } from '@/store/useStore';
 import { useAuth } from '@/context/AuthContext';
 import { getAnalyticsSummary } from '@/lib/api';
+import { Capacitor } from '@capacitor/core';
 
 export default function ProfileView() {
   const { profile, stats, badges } = useUserStore();
@@ -71,9 +72,10 @@ export default function ProfileView() {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // Check if app is in standalone mode (already installed)
+    // Check if app is in standalone mode (already installed) or running natively in Capacitor
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    if (isStandalone) {
+    const isNative = Capacitor.isNativePlatform();
+    if (isStandalone || isNative) {
       setIsInstalled(true);
     }
 

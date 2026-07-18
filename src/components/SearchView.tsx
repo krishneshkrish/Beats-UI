@@ -84,7 +84,7 @@ export default function SearchView() {
     setLoading(true);
     const delay = setTimeout(async () => {
       try {
-        const searchRes = await searchMedia(query, source, 1);
+        const searchRes = await searchMedia(query, source, 6);
         setResults(searchRes || []);
       } catch (err) {
         console.error('Failed to search media', err);

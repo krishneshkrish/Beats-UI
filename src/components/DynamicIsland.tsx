@@ -16,9 +16,9 @@ import {
   Play,
   Pause
 } from 'lucide-react';
-import { useNavigationStore, usePlayerStore } from '@/store/useStore';
+import { useNavigationStore, usePlayerStore, TabDestination } from '@/store/useStore';
 
-const NAV_ITEMS = [
+const NAV_ITEMS: { id: TabDestination; label: string; icon: any }[] = [
   { id: 'Home', label: 'Home', icon: Home },
   { id: 'Player', label: 'Player', icon: Music },
   { id: 'Discover', label: 'Discover', icon: Compass },

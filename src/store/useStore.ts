@@ -106,7 +106,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (queue.length === 0) return;
 
     if (progress > 3) {
-      set({ progress: 0, lyricsActiveLine: 0 });
+      set({ progress: 0, seekToTime: 0, lyricsActiveLine: 0 });
       return;
     }
 
@@ -195,13 +195,15 @@ export const useUserStore = create<UserState>((set) => ({
   addHistoryItem: (item) => set((state) => ({ history: [item, ...state.history] }))
 }));
 
+export type TabDestination = 'Home' | 'Player' | 'Discover' | 'Analytics' | 'Journey' | 'Moods' | 'Search' | 'Profile';
+
 interface NavigationState {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
+    activeTab: TabDestination;
+    setActiveTab: (tab: TabDestination) => void;
 }
 
 export const useNavigationStore = create<NavigationState>((set) => ({
-  activeTab: 'Home',
-  setActiveTab: (tab) => set({ activeTab: tab })
+    activeTab: 'Home',
+    setActiveTab: (tab) => set({ activeTab: tab })
 }));
 
