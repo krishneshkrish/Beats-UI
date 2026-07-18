@@ -258,9 +258,6 @@ export default function AudioPlayer() {
       config={{
         file: {
           forceAudio: true,
-          attributes: {
-            crossOrigin: 'anonymous',
-          },
         }
       }}
       onPlay={() => {
