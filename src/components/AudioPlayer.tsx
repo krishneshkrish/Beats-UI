@@ -54,7 +54,7 @@ export default function AudioPlayer() {
                 try {
                     navigator.mediaSession.setPositionState({
                         duration: duration,
-                        playbackRate: isPlaying ? 1.0 : 0.0,
+                        playbackRate: 1.0,
                         position: progressSec,
                     });
                 } catch (e) {
@@ -203,7 +203,18 @@ export default function AudioPlayer() {
     }
 
     retryCountRef.current[songId] = retries + 1;
-    console.warn(`Playback error for ${songId}. Retry attempt ${retries + 1}/3. Refreshing URL...`);
+
+    const isYoutubeUrl = currentSong.url.includes('youtube.com') || currentSong.url.includes('youtu.be') || currentSong.url.includes('googlevideo.com');
+    if (!isYoutubeUrl) {
+      console.warn(`Playback error on static/mock song ${songId}. Retrying once directly without refresh...`);
+      if (retries === 0) {
+        setIsPlaying(false);
+        setTimeout(() => setIsPlaying(true), 100);
+      } else {
+        setIsPlaying(false);
+      }
+      return;
+    }
 
     try {
       const sourceParam = currentSong.url.includes('soundcloud.com') ? 'soundcloud' : 'youtube';
@@ -247,6 +258,9 @@ export default function AudioPlayer() {
       config={{
         file: {
           forceAudio: true,
+          attributes: {
+            crossOrigin: 'anonymous',
+          },
         }
       }}
       onPlay={() => {
