@@ -59,7 +59,7 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
         ]
       });
 
-      const { togglePlay, nextTrack, prevTrack } = usePlayerStore.getState();
+      const { togglePlay, nextTrack, prevTrack, seekTo } = usePlayerStore.getState();
 
       navigator.mediaSession.setActionHandler('play', () => {
         togglePlay();
@@ -74,10 +74,16 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
         prevTrack();
       });
 
-      // Explicitly disable seek actions to override YouTube iframe registrations and force iOS next/prev buttons
+      // Register seekto handler to support timeline scrubbing from lock screen
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime !== undefined) {
+          seekTo(details.seekTime);
+        }
+      });
+
+      // Explicitly disable seek buttons to override YouTube iframe default fast-forward/rewind buttons
       navigator.mediaSession.setActionHandler('seekforward', null);
       navigator.mediaSession.setActionHandler('seekbackward', null);
-      navigator.mediaSession.setActionHandler('seekto', null);
     } catch (err) {
       console.error('Failed to configure Media Session metadata/handlers:', err);
     }

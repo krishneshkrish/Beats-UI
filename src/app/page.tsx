@@ -24,31 +24,13 @@ function useVisibilityFreeze() {
     useEffect(() => {
         if (typeof window === 'undefined') return;
 
-        // Keep track of active intervals and animation frame callbacks
-        const activeIntervals = new Map<number, { handler: TimerHandler; timeout?: number; args: any[] }>();
+        // Keep track of active animation frame callbacks
         const activeFrames = new Map<number, FrameRequestCallback>();
 
-        const originalSetInterval = window.setInterval;
-        const originalClearInterval = window.clearInterval;
         const originalRequestAnimationFrame = window.requestAnimationFrame;
         const originalCancelAnimationFrame = window.cancelAnimationFrame;
 
         let isAppHidden = document.hidden;
-
-        // Monkey-patch setInterval to keep record of active intervals
-        (window as any).setInterval = (handler: TimerHandler, timeout?: number, ...args: any[]) => {
-            const id = originalSetInterval(handler, timeout, ...args);
-            if (!isAppHidden) {
-                activeIntervals.set(id, { handler, timeout, args });
-            }
-            return id;
-        };
-
-        // Monkey-patch clearInterval
-        (window as any).clearInterval = (id: any) => {
-            activeIntervals.delete(id);
-            originalClearInterval(id);
-        };
 
         // Monkey-patch requestAnimationFrame
         (window as any).requestAnimationFrame = (callback: FrameRequestCallback) => {
@@ -72,24 +54,12 @@ function useVisibilityFreeze() {
                 activeFrames.forEach((_, id) => {
                     originalCancelAnimationFrame(id);
                 });
-
-                // Suspend active interval tickers
-                activeIntervals.forEach((_, id) => {
-                    originalClearInterval(id);
-                });
             } else {
                 // Restore requestAnimationFrame callback threads
                 const framesToRestore = new Map(activeFrames);
                 activeFrames.clear();
                 framesToRestore.forEach((callback) => {
                     window.requestAnimationFrame(callback);
-                });
-
-                // Restore setInterval polling ticks
-                const intervalsToRestore = new Map(activeIntervals);
-                activeIntervals.clear();
-                intervalsToRestore.forEach((item) => {
-                    window.setInterval(item.handler, item.timeout, ...item.args);
                 });
             }
         };
@@ -98,8 +68,6 @@ function useVisibilityFreeze() {
 
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
-            window.setInterval = originalSetInterval;
-            window.clearInterval = originalClearInterval;
             window.requestAnimationFrame = originalRequestAnimationFrame;
             window.cancelAnimationFrame = originalCancelAnimationFrame;
         };

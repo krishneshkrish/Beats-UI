@@ -245,6 +245,11 @@ export default function AudioPlayer() {
       playing={isPlaying}
       volume={volume}
       muted={isMuted}
+      config={{
+        file: {
+          forceAudio: true,
+        }
+      }}
       onPlay={() => {
         if (currentSong) {
           retryCountRef.current[currentSong.id] = 0;
