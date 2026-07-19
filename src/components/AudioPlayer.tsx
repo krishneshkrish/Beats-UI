@@ -267,7 +267,11 @@ export default function AudioPlayer() {
       muted={isMuted}
       config={{
         file: {
-          forceAudio: true,
+          forceAudio: currentSong?.url ? !currentSong.url.includes('/api/yt/stream') : true,
+          attributes: {
+            playsInline: true,
+            webkitPlaysInline: true,
+          }
         }
       }}
       onPlay={() => {
