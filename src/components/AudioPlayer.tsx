@@ -5,6 +5,16 @@ import { usePlayerStore } from '@/store/useStore';
 import { refreshStreamUrl, api } from '@/lib/api';
 import FilePlayer from 'react-player/file';
 
+const getPlayableUrl = (url: string) => {
+  if (!url) return '';
+  // Upgrade remote HTTP URLs to HTTPS to prevent Mixed Content blocking in browsers
+  // and App Transport Security (ATS) / Cleartext blocks on native devices.
+  if (url.startsWith('http://') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
+    return url.replace('http://', 'https://');
+  }
+  return url;
+};
+
 export default function AudioPlayer() {
   const [isMounted, setIsMounted] = useState(false);
   const playerRef = useRef<any>(null);
@@ -204,7 +214,7 @@ export default function AudioPlayer() {
 
     retryCountRef.current[songId] = retries + 1;
 
-    const isYoutubeUrl = currentSong.url.includes('youtube.com') || currentSong.url.includes('youtu.be') || currentSong.url.includes('googlevideo.com');
+    const isYoutubeUrl = currentSong.url.includes('youtube.com') || currentSong.url.includes('youtu.be') || currentSong.url.includes('googlevideo.com') || currentSong.url.includes('/api/yt/stream');
     if (!isYoutubeUrl) {
       console.warn(`Playback error on static/mock song ${songId}. Retrying once directly without refresh...`);
       if (retries === 0) {
@@ -251,7 +261,7 @@ export default function AudioPlayer() {
   return (
     <PlayerComponent
       ref={playerRef}
-      url={currentSong?.url || ''}
+      url={getPlayableUrl(currentSong?.url || '')}
       playing={isPlaying}
       volume={volume}
       muted={isMuted}
