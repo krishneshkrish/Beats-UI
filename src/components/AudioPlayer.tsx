@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { usePlayerStore } from '@/store/useStore';
 import { refreshStreamUrl, api } from '@/lib/api';
-import FilePlayer from 'react-player/file';
+import ReactPlayer from 'react-player';
 
 const getPlayableUrl = (url: string) => {
   if (!url) return '';
@@ -72,7 +72,7 @@ export default function AudioPlayer() {
                 }
             }
         }
-    }, [currentSong, isPlaying, progress]);
+    }, [currentSong, progress]);
 
     // Trigger position sync on major status updates (play, pause, current song change)
     useEffect(() => {
@@ -108,7 +108,7 @@ export default function AudioPlayer() {
         }
       })
       .then(res => {
-        if (res.data && res.data.length > 0) {
+        if (res.data && Array.isArray(res.data) && res.data.length > 0) {
           appendToQueue(res.data);
         }
       })
@@ -189,7 +189,7 @@ export default function AudioPlayer() {
     };
 
     const handleEnded = () => {
-        const { isRepeat, seekTo, setProgress: storeSetProgress } = usePlayerStore.getState();
+        const { isRepeat, setProgress: storeSetProgress } = usePlayerStore.getState();
         if (isRepeat === 'one') {
             if (playerRef.current) {
                 playerRef.current.seekTo(0, 'seconds');
@@ -256,7 +256,9 @@ export default function AudioPlayer() {
   if (!isMounted) return null;
 
   const isYouTube = currentSong?.url ? (currentSong.url.includes('youtube.com') || currentSong.url.includes('youtu.be')) : false;
-  const PlayerComponent = FilePlayer as any;
+  const isSoundCloud = currentSong?.url ? currentSong.url.includes('soundcloud.com') : false;
+  const isStream = currentSong?.url ? currentSong.url.includes('/api/yt/stream') : false;
+  const PlayerComponent = ReactPlayer as any;
 
   return (
     <PlayerComponent
@@ -267,7 +269,7 @@ export default function AudioPlayer() {
       muted={isMuted}
       config={{
         file: {
-          forceAudio: currentSong?.url ? !currentSong.url.includes('/api/yt/stream') : true,
+          forceAudio: !isYouTube && !isSoundCloud && !isStream,
           attributes: {
             playsInline: true,
             webkitPlaysInline: true,

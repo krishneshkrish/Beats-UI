@@ -8,7 +8,7 @@ export const MOCK_SONGS: Song[] = [
     album: 'Liquid Dreams',
     artwork: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&q=80',
     duration: 372,
-    url: 'https://files.testfile.org/AUDIO/C/M4A/sample1.m4a',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
     lyrics: [
       'Tracing lines across the dark',
       'Waiting for the first neon spark',
@@ -31,7 +31,7 @@ export const MOCK_SONGS: Song[] = [
     album: 'Outrun the Grid',
     artwork: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
     duration: 423,
-    url: 'https://files.testfile.org/AUDIO/C/M4A/sample2.m4a',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
     lyrics: [
       'Headlights cutting through the mist',
       'A feeling that we can\'t resist',
@@ -54,7 +54,7 @@ export const MOCK_SONGS: Song[] = [
     album: 'Cosmic Calm',
     artwork: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&q=80',
     duration: 302,
-    url: 'https://files.testfile.org/AUDIO/C/M4A/sample3.m4a',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
     lyrics: [
       'Drifting in a sea of stars',
       'Looking down on dusty Mars',
@@ -77,7 +77,7 @@ export const MOCK_SONGS: Song[] = [
     album: 'Velocity Core',
     artwork: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=500&q=80',
     duration: 502,
-    url: 'https://files.testfile.org/AUDIO/C/M4A/sample1.m4a',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
     lyrics: [
       'Power levels critical, system override',
       'We are leaving gravity, nowhere left to hide',
@@ -99,7 +99,7 @@ export const MOCK_SONGS: Song[] = [
     album: 'Tidal Waves',
     artwork: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500&q=80',
     duration: 335,
-    url: 'https://files.testfile.org/AUDIO/C/M4A/sample2.m4a',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
     lyrics: [
       'Golden sand beneath our feet',
       'Ocean breeze is warm and sweet',
@@ -122,7 +122,7 @@ export const MOCK_SONGS: Song[] = [
     album: 'Cozy Afternoons',
     artwork: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=500&q=80',
     duration: 298,
-    url: 'https://files.testfile.org/AUDIO/C/M4A/sample3.m4a',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',
     lyrics: [
       'Raindrops tap the window pane',
       'Steaming mug of coffee again',
@@ -145,7 +145,7 @@ export const MOCK_SONGS: Song[] = [
     album: 'Subatomic Beats',
     artwork: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500&q=80',
     duration: 310,
-    url: 'https://files.testfile.org/AUDIO/C/M4A/sample1.m4a',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
     lyrics: [
       'Down below the visible',
       'Frequencies invisible',
@@ -168,7 +168,7 @@ export const MOCK_SONGS: Song[] = [
     album: 'Lost in Reverie',
     artwork: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=500&q=80',
     duration: 415,
-    url: 'https://files.testfile.org/AUDIO/C/M4A/sample2.m4a',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
     lyrics: [
       'Whispers in the morning haze',
       'Lost inside a silent maze',

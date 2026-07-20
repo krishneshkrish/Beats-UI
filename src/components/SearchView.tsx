@@ -106,10 +106,11 @@ export default function SearchView() {
 
   const handlePlay = async (song: Song, allResults: Song[]) => {
     saveSearch(query);
-    // Play the song immediately — don't wait for queue
-    usePlayerStore.getState().playTrack(song, [song]);
+    // Play the song immediately with the available search results as queue
+    const initialQueue = allResults && allResults.length > 0 ? allResults : [song];
+    usePlayerStore.getState().playTrack(song, initialQueue);
 
-    // Fetch vibe-matched queue in background silently
+    // Fetch vibe-matched queue in background silently if API endpoint is available
     try {
       const response = await api.get(`/api/yt/queue`, {
         params: { 
@@ -119,7 +120,9 @@ export default function SearchView() {
           limit: 8 
         }
       });
-      usePlayerStore.getState().setQueue([song, ...response.data]);
+      if (response && response.data && Array.isArray(response.data) && response.data.length > 0) {
+        usePlayerStore.getState().setQueue([song, ...response.data]);
+      }
     } catch (e) {
       console.error('Queue fetch failed', e);
     }
