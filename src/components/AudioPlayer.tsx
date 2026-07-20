@@ -269,7 +269,7 @@ export default function AudioPlayer() {
       muted={isMuted}
       config={{
         file: {
-          forceAudio: !isYouTube && !isSoundCloud && !isStream,
+          forceAudio: !isYouTube && !isSoundCloud,
           attributes: {
             playsInline: true,
             webkitPlaysInline: true,

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { GreetingResponse, Song, AnalyticsSummary, TimelineItem, SearchResult } from '../types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -76,27 +76,19 @@ export const searchAPI = async (q: string, type?: string): Promise<SearchResult>
 };
 
 export const searchMedia = async (q: string, source: string, limit = 5): Promise<Song[]> => {
-  const response = !API_BASE_URL
-    ? await api.get('/api/search', { params: { q } })
-    : await api.get('/api/yt/search', { params: { q, source, limit } });
-  
+  const endpoint = source === 'youtube' ? '/api/yt/search' : '/api/search';
+  const response = await api.get(endpoint, { params: { q, source, limit } });
   const data = response.data;
   return Array.isArray(data) ? data : (data?.songs || data || []);
 };
 
 export const getTrending = async (mood: string): Promise<Song[]> => {
-  const response = !API_BASE_URL
-    ? await api.get('/api/recommendations', { params: { mood } })
-    : await api.get('/api/yt/trending', { params: { mood } });
-  
+  const response = await api.get('/api/yt/trending', { params: { mood } });
   const data = response.data;
   return Array.isArray(data) ? data : (data?.songs || data || []);
 };
 
 export const refreshStreamUrl = async (id: string, source = 'youtube'): Promise<{ url: string }> => {
-  if (!API_BASE_URL) {
-    return { url: '' };
-  }
   const response = await api.get('/api/yt/refresh', {
     params: { video_id: id, source },
   });
