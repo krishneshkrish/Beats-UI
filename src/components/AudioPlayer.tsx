@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { usePlayerStore } from '@/store/useStore';
 import { refreshStreamUrl, api } from '@/lib/api';
-import ReactPlayer from 'react-player';
 import { Song } from '@/types';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 const getPlayableUrl = (song: Song | null): string => {
   if (!song) return '';
@@ -16,29 +17,27 @@ const getPlayableUrl = (song: Song | null): string => {
 
   const url = song.url || '';
 
-  // 2. Resolve YouTube stream endpoints or YouTube 11-char IDs to native YouTube watch links for ReactPlayer
-  if (url.includes('/api/yt/stream')) {
-    const match = url.match(/video_id=([^&]+)/);
-    const videoId = match ? match[1] : song.id;
-    if (videoId && videoId.length >= 5) {
-      return `https://www.youtube.com/watch?v=${videoId}`;
-    }
+  // 2. Format backend direct audio stream proxy URLs (/api/yt/stream)
+  if (url.startsWith('/api/yt/stream')) {
+    return `${API_BASE_URL}${url}`;
   }
 
-  if (song.id && song.id.length === 11 && !url.includes('soundhelix.com') && !url.endsWith('.mp3') && !url.endsWith('.m4a')) {
-    return `https://www.youtube.com/watch?v=${song.id}`;
+  // 3. For YouTube track IDs or non-static URLs, route to backend direct audio stream proxy endpoint
+  if (song.id && (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('/api/yt/stream') || !url.endsWith('.mp3'))) {
+    return `${API_BASE_URL}/api/yt/stream?video_id=${song.id}`;
   }
 
-  // 3. Upgrade remote HTTP URLs to HTTPS to prevent Mixed Content blocking
+  // 4. Upgrade remote HTTP URLs to HTTPS to prevent Mixed Content blocking
   if (url.startsWith('http://') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
     return url.replace('http://', 'https://');
   }
+
   return url;
 };
 
 export default function AudioPlayer() {
   const [isMounted, setIsMounted] = useState(false);
-  const playerRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const retryCountRef = useRef<Record<string, number>>({});
   const prefetchedRef = useRef<Set<string>>(new Set());
 
@@ -61,14 +60,7 @@ export default function AudioPlayer() {
     setIsMounted(true);
   }, []);
 
-  // Reset progress when currentSong is cleared
-  useEffect(() => {
-    if (!currentSong) {
-      setProgress(0);
-    }
-  }, [currentSong, setProgress]);
-
-  // Strict isFinite guarded Media Session Position State Sync
+  // Safe Position State Sync with strict isFinite() guards
   const updatePositionState = useCallback((pos: number, dur: number) => {
     if (
       typeof window !== 'undefined' &&
@@ -84,12 +76,12 @@ export default function AudioPlayer() {
           position: pos,
         });
       } catch (e) {
-        console.error('Error updating mediaSession position state:', e);
+        console.error('Error updating MediaSession position state:', e);
       }
     }
   }, []);
 
-  // Sync mediaSession metadata & action handlers when currentSong updates
+  // Complete MediaSession API Binding & Metadata Sync
   useEffect(() => {
     if (!currentSong || typeof window === 'undefined' || !('mediaSession' in navigator)) return;
 
@@ -109,6 +101,7 @@ export default function AudioPlayer() {
         ],
       });
 
+      // Register all four mandatory action handlers plus seekto
       navigator.mediaSession.setActionHandler('play', () => {
         setIsPlaying(true);
       });
@@ -129,27 +122,69 @@ export default function AudioPlayer() {
       navigator.mediaSession.setActionHandler('seekforward', null);
       navigator.mediaSession.setActionHandler('seekbackward', null);
     } catch (err) {
-      console.error('Failed to configure Media Session metadata/handlers:', err);
+      console.error('Failed to configure MediaSession API:', err);
     }
   }, [currentSong, setIsPlaying, nextTrack, prevTrack, seekTo]);
 
-  // Sync playbackState on isPlaying change
+  // Sync track change onto persistent HTML5 <audio> element
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-      if (currentSong) {
-        updatePositionState(progress, currentSong.duration);
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (!currentSong) {
+      audio.src = '';
+      setProgress(0);
+      return;
+    }
+
+    const playableUrl = getPlayableUrl(currentSong);
+    if (audio.src !== playableUrl) {
+      audio.src = playableUrl;
+      audio.load();
+
+      if (isPlaying) {
+        audio.play().catch((err) => {
+          console.warn('Autoplay blocked on track load:', err);
+          setIsPlaying(false);
+        });
       }
     }
-  }, [isPlaying, currentSong, progress, updatePositionState]);
+  }, [currentSong, isPlaying, setProgress, setIsPlaying]);
+
+  // Sync play/pause state changes
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !currentSong) return;
+
+    if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    }
+
+    if (isPlaying && audio.paused) {
+      audio.play().catch((err) => {
+        console.warn('Playback error on user gesture / state toggle:', err);
+        setIsPlaying(false);
+      });
+    } else if (!isPlaying && !audio.paused) {
+      audio.pause();
+    }
+  }, [isPlaying, currentSong, setIsPlaying]);
+
+  // Sync volume and mute changes directly to HTML5 audio element
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.volume = isMuted ? 0 : volume;
+  }, [volume, isMuted]);
 
   // Handle seek requests from the store
   useEffect(() => {
-    if (seekToTime !== null && playerRef.current) {
-      playerRef.current.seekTo(seekToTime, 'seconds');
+    const audio = audioRef.current;
+    if (seekToTime !== null && audio) {
+      audio.currentTime = seekToTime;
       seekTo(null);
       if (currentSong) {
-        setTimeout(() => updatePositionState(seekToTime, currentSong.duration), 50);
+        updatePositionState(seekToTime, currentSong.duration);
       }
     }
   }, [seekToTime, seekTo, currentSong, updatePositionState]);
@@ -173,63 +208,7 @@ export default function AudioPlayer() {
     };
   }, []);
 
-  // Infinite Queue (Non-stop playback)
-  useEffect(() => {
-    const { queue, currentSong: storeCurrentSong, appendToQueue } = usePlayerStore.getState();
-    if (!storeCurrentSong || queue.length === 0) return;
-
-    const currentIndex = queue.findIndex(s => s.id === storeCurrentSong.id);
-    const songsRemaining = queue.length - currentIndex - 1;
-
-    // When 3 songs remain — fetch next batch silently
-    if (songsRemaining <= 3) {
-      const lastSong = queue[queue.length - 1];
-      api.get('/api/yt/queue', {
-        params: {
-          video_id: lastSong.id,
-          title: lastSong.title,
-          artist: lastSong.artist,
-          limit: 8
-        }
-      })
-      .then(res => {
-        if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-          appendToQueue(res.data);
-        }
-      })
-      .catch(err => console.error('Infinite queue fetch failed:', err));
-    }
-  }, [currentSong]);
-
-  // Fetch lyrics for the current song if not already present
-  useEffect(() => {
-    if (!currentSong || (currentSong.lyrics && currentSong.lyrics.length > 0)) return;
-
-    const songId = currentSong.id;
-    
-    api.get(`/api/yt/lyrics`, {
-      params: { video_id: songId }
-    })
-    .then(res => {
-      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-        usePlayerStore.setState((state) => {
-          if (state.currentSong && state.currentSong.id === songId) {
-            const updatedSong = { ...state.currentSong, lyrics: res.data };
-            const updatedQueue = state.queue.map(s => s.id === songId ? updatedSong : s);
-            return {
-              currentSong: updatedSong,
-              queue: updatedQueue
-            };
-          }
-          return {};
-        });
-      }
-    })
-    .catch(err => {
-      console.error('AudioPlayer: Failed to fetch lyrics:', err);
-    });
-  }, [currentSong]);
-
+  // Prefetch next track stream URL when remaining duration <= 20 seconds
   const prefetchNextTrackUrl = useCallback(async (nextTrack: Song) => {
     try {
       let resolvedUrl: string = getPlayableUrl(nextTrack);
@@ -250,32 +229,36 @@ export default function AudioPlayer() {
     }
   }, []);
 
-  const handleDuration = (duration: number) => {
-    if (!currentSong) return;
-    if (duration && currentSong.duration !== duration) {
+  // HTML5 Audio Event Handlers
+  const handleLoadedMetadata = () => {
+    const audio = audioRef.current;
+    if (!audio || !currentSong) return;
+
+    const dur = audio.duration;
+    if (isFinite(dur) && dur > 0 && currentSong.duration !== dur) {
       usePlayerStore.setState((state) => {
         if (state.currentSong && state.currentSong.id === currentSong.id) {
-          const updatedSong = { ...state.currentSong, duration };
+          const updatedSong = { ...state.currentSong, duration: dur };
           const updatedQueue = state.queue.map(s => s.id === currentSong.id ? updatedSong : s);
-          return {
-            currentSong: updatedSong,
-            queue: updatedQueue
-          };
+          return { currentSong: updatedSong, queue: updatedQueue };
         }
         return {};
       });
-      setTimeout(() => updatePositionState(progress, duration), 50);
     }
   };
 
-  const handleProgress = (state: { playedSeconds: number }) => {
-    if (!currentSong) return;
-    const currentProgress = state.playedSeconds;
-    setProgress(currentProgress);
-    updatePositionState(currentProgress, currentSong.duration);
+  const handleTimeUpdate = () => {
+    const audio = audioRef.current;
+    if (!audio || !currentSong) return;
 
-    // 1. Prefetch Queue Engine: When remaining song time <= 20 seconds, pre-resolve next track stream URL
-    const remainingTime = (currentSong.duration || 0) - currentProgress;
+    const currentProgress = audio.currentTime;
+    setProgress(currentProgress);
+    updatePositionState(currentProgress, currentSong.duration || audio.duration);
+
+    // Prefetch Queue Engine: When remaining song time <= 20s, pre-resolve next track stream URL
+    const duration = currentSong.duration || audio.duration || 0;
+    const remainingTime = duration - currentProgress;
+
     if (remainingTime <= 20 && remainingTime > 0) {
       const { queue, isShuffle } = usePlayerStore.getState();
       const currIndex = queue.findIndex(s => s.id === currentSong.id);
@@ -292,20 +275,16 @@ export default function AudioPlayer() {
       }
     }
 
-    // 2. Dynamic linear calculation to sync lyrics lines with strict boundary clamps
-    if (currentSong.lyrics && currentSong.lyrics.length > 0) {
+    // Sync lyrics line
+    if (currentSong.lyrics && currentSong.lyrics.length > 0 && duration > 0) {
       const totalLines = currentSong.lyrics.length;
-      const duration = currentSong.duration;
-      let activeLine = 0;
-      if (duration && isFinite(duration) && duration > 0 && isFinite(currentProgress)) {
-        activeLine = Math.max(
-          0,
-          Math.min(
-            Math.floor((currentProgress / duration) * totalLines),
-            totalLines - 1
-          )
-        );
-      }
+      const activeLine = Math.max(
+        0,
+        Math.min(
+          Math.floor((currentProgress / duration) * totalLines),
+          totalLines - 1
+        )
+      );
       setLyricsActiveLine(activeLine);
     }
   };
@@ -313,8 +292,10 @@ export default function AudioPlayer() {
   const handleEnded = () => {
     const { isRepeat, setProgress: storeSetProgress } = usePlayerStore.getState();
     if (isRepeat === 'one') {
-      if (playerRef.current) {
-        playerRef.current.seekTo(0, 'seconds');
+      const audio = audioRef.current;
+      if (audio) {
+        audio.currentTime = 0;
+        audio.play().catch((e) => console.warn('Repeat play error:', e));
       }
       storeSetProgress(0);
       if (currentSong) {
@@ -329,48 +310,34 @@ export default function AudioPlayer() {
     if (!currentSong) return;
     const songId = currentSong.id;
     const retries = retryCountRef.current[songId] || 0;
-    
+
     if (retries >= 3) {
-      console.error(`Failed to play song ${songId} after 3 refresh attempts.`);
+      console.error(`Failed to play track ${songId} after 3 refresh attempts.`);
       setIsPlaying(false);
       return;
     }
 
     retryCountRef.current[songId] = retries + 1;
 
-    const isYoutubeUrl = currentSong.url.includes('youtube.com') || currentSong.url.includes('youtu.be') || currentSong.url.includes('googlevideo.com') || currentSong.url.includes('/api/yt/stream') || (currentSong.id && currentSong.id.length === 11);
-    if (!isYoutubeUrl) {
-      console.warn(`Playback error on static/mock song ${songId}. Retrying once directly without refresh...`);
-      if (retries === 0) {
-        setIsPlaying(false);
-        setTimeout(() => setIsPlaying(true), 100);
-      } else {
-        setIsPlaying(false);
-      }
-      return;
-    }
-
     try {
-      const sourceParam = currentSong.url.includes('soundcloud.com') ? 'soundcloud' : 'youtube';
-      const refreshResult = await refreshStreamUrl(songId, sourceParam);
-      
+      const refreshResult = await refreshStreamUrl(songId, 'youtube');
       if (refreshResult && refreshResult.url) {
-        console.log('Stream URL successfully refreshed:', refreshResult.url);
         const newPlayableUrl = getPlayableUrl({ ...currentSong, url: refreshResult.url });
-        
         usePlayerStore.setState((state) => {
           if (state.currentSong && state.currentSong.id === songId) {
             const updatedSong = { ...state.currentSong, url: refreshResult.url, resolvedUrl: newPlayableUrl };
             const updatedQueue = state.queue.map(s => s.id === songId ? updatedSong : s);
-            return {
-              currentSong: updatedSong,
-              queue: updatedQueue
-            };
+            return { currentSong: updatedSong, queue: updatedQueue };
           }
           return {};
         });
-      } else {
-        console.error('Refresh endpoint returned an empty URL.');
+
+        const audio = audioRef.current;
+        if (audio) {
+          audio.src = newPlayableUrl;
+          audio.load();
+          audio.play().catch(e => console.warn('Play after error refresh blocked:', e));
+        }
       }
     } catch (refreshErr) {
       console.error('Error refreshing stream URL:', refreshErr);
@@ -379,55 +346,17 @@ export default function AudioPlayer() {
 
   if (!isMounted) return null;
 
-  const playableUrl = getPlayableUrl(currentSong);
-  const isYouTube = playableUrl.includes('youtube.com') || playableUrl.includes('youtu.be');
-  const isSoundCloud = playableUrl.includes('soundcloud.com');
-  const PlayerComponent = ReactPlayer as any;
-
   return (
-    <PlayerComponent
-      ref={playerRef}
-      url={playableUrl}
-      playing={isPlaying}
-      volume={volume}
-      muted={isMuted}
-      config={{
-        youtube: {
-          playerVars: {
-            autoplay: 1,
-            controls: 0,
-          }
-        },
-        file: {
-          forceAudio: !isYouTube && !isSoundCloud,
-          attributes: {
-            preload: 'metadata',
-            playsInline: true,
-            webkitPlaysInline: true,
-          }
-        }
-      }}
-      onPlay={() => {
-        if (currentSong) {
-          retryCountRef.current[currentSong.id] = 0;
-        }
-      }}
-      onDuration={handleDuration}
-      onProgress={handleProgress}
+    <audio
+      ref={audioRef}
+      playsInline={true}
+      preload="metadata"
+      onLoadedMetadata={handleLoadedMetadata}
+      onTimeUpdate={handleTimeUpdate}
       onEnded={handleEnded}
       onError={handleError}
-      width="10px"
-      height="10px"
-      style={{
-        position: 'fixed',
-        bottom: '10px',
-        right: '10px',
-        width: '10px',
-        height: '10px',
-        opacity: '0.001',
-        pointerEvents: 'none',
-        zIndex: -9999,
-      }}
+      style={{ display: 'none' }}
     />
   );
 }
+
