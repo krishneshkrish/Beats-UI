@@ -5,7 +5,7 @@ import { usePlayerStore } from '@/store/useStore';
 import { refreshStreamUrl, api } from '@/lib/api';
 import { Song } from '@/types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 
 const getPlayableUrl = (song: Song | null): string => {
   if (!song) return '';
