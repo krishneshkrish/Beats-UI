@@ -193,3 +193,11 @@ body {
   animation-play-state: paused;
 }
 
+/* Background Battery & Thread Freezing when screen/tab is hidden */
+body.app-background-frozen *,
+body.app-background-frozen *::before,
+body.app-background-frozen *::after {
+  animation-play-state: paused !important;
+  transition: none !important;
+}
+

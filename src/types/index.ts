@@ -6,6 +6,7 @@ export interface Song {
   artwork: string;
   duration: number; // in seconds
   url: string;      // audio URL
+  resolvedUrl?: string; // pre-fetched direct streaming URL
   lyrics?: string[]; // array of strings (lines)
 }
 
