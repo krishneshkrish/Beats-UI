@@ -38,56 +38,7 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, []);
 
-  // Sync mediaSession playbackState
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-    }
-  }, [isPlaying]);
 
-  // Sync with Media Session API for lock screen and background control
-  useEffect(() => {
-    if (!currentSong || typeof window === 'undefined' || !('mediaSession' in navigator)) return;
-
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentSong.title,
-        artist: currentSong.artist,
-        album: currentSong.album || 'YouTube Stream',
-        artwork: [
-          { src: currentSong.artwork, sizes: '512x512', type: 'image/jpeg' }
-        ]
-      });
-
-      const { togglePlay, nextTrack, prevTrack, seekTo } = usePlayerStore.getState();
-
-      navigator.mediaSession.setActionHandler('play', () => {
-        togglePlay();
-      });
-      navigator.mediaSession.setActionHandler('pause', () => {
-        togglePlay();
-      });
-      navigator.mediaSession.setActionHandler('nexttrack', () => {
-        nextTrack();
-      });
-      navigator.mediaSession.setActionHandler('previoustrack', () => {
-        prevTrack();
-      });
-
-      // Register seekto handler to support timeline scrubbing from lock screen
-      navigator.mediaSession.setActionHandler('seekto', (details) => {
-        if (details.seekTime !== undefined) {
-          seekTo(details.seekTime);
-        }
-      });
-
-      // Explicitly disable seek buttons to override YouTube iframe default fast-forward/rewind buttons
-      navigator.mediaSession.setActionHandler('seekforward', null);
-      navigator.mediaSession.setActionHandler('seekbackward', null);
-    } catch (err) {
-      console.error('Failed to configure Media Session metadata/handlers:', err);
-    }
-  }, [currentSong]);
 
   // Implement History Hydration on Boot / Username change
   useEffect(() => {

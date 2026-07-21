@@ -101,30 +101,83 @@ export default function AudioPlayer() {
         ],
       });
 
-      // Register all four mandatory action handlers plus seekto
-      navigator.mediaSession.setActionHandler('play', () => {
+      // Register all four mandatory action handlers plus seekto with direct audio invocation
+      navigator.mediaSession.setActionHandler('play', async () => {
+        const audio = audioRef.current;
         setIsPlaying(true);
+        if (audio && audio.paused) {
+          try {
+            await audio.play();
+            if ('mediaSession' in navigator) {
+              navigator.mediaSession.playbackState = 'playing';
+            }
+          } catch (err) {
+            console.error('Lock screen play action error:', err);
+          }
+        }
       });
+
       navigator.mediaSession.setActionHandler('pause', () => {
+        const audio = audioRef.current;
         setIsPlaying(false);
+        if (audio && !audio.paused) {
+          audio.pause();
+          if ('mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = 'paused';
+          }
+        }
       });
+
       navigator.mediaSession.setActionHandler('nexttrack', () => {
         nextTrack();
       });
+
       navigator.mediaSession.setActionHandler('previoustrack', () => {
         prevTrack();
       });
+
       navigator.mediaSession.setActionHandler('seekto', (details) => {
         if (details.seekTime !== undefined && isFinite(details.seekTime)) {
+          const audio = audioRef.current;
+          if (audio) {
+            audio.currentTime = details.seekTime;
+          }
           seekTo(details.seekTime);
         }
       });
+
       navigator.mediaSession.setActionHandler('seekforward', null);
       navigator.mediaSession.setActionHandler('seekbackward', null);
     } catch (err) {
       console.error('Failed to configure MediaSession API:', err);
     }
   }, [currentSong, setIsPlaying, nextTrack, prevTrack, seekTo]);
+
+  // Mobile Audio Context Unlocking on first user gesture (touchstart/click)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const unlockAudioContext = () => {
+      const audio = audioRef.current;
+      if (audio && audio.paused && !usePlayerStore.getState().isPlaying) {
+        audio.play().then(() => {
+          if (!usePlayerStore.getState().isPlaying) {
+            audio.pause();
+          }
+        }).catch(() => {
+          // Ignored silent unlock
+        });
+      }
+    };
+
+    window.addEventListener('touchstart', unlockAudioContext, { once: true });
+    window.addEventListener('click', unlockAudioContext, { once: true });
+
+    return () => {
+      window.removeEventListener('touchstart', unlockAudioContext);
+      window.removeEventListener('click', unlockAudioContext);
+    };
+  }, []);
 
   // Sync track change onto persistent HTML5 <audio> element
   useEffect(() => {
@@ -145,11 +198,10 @@ export default function AudioPlayer() {
       if (isPlaying) {
         audio.play().catch((err) => {
           console.warn('Autoplay blocked on track load:', err);
-          setIsPlaying(false);
         });
       }
     }
-  }, [currentSong, isPlaying, setProgress, setIsPlaying]);
+  }, [currentSong, isPlaying, setProgress]);
 
   // Sync play/pause state changes
   useEffect(() => {
@@ -163,12 +215,11 @@ export default function AudioPlayer() {
     if (isPlaying && audio.paused) {
       audio.play().catch((err) => {
         console.warn('Playback error on user gesture / state toggle:', err);
-        setIsPlaying(false);
       });
     } else if (!isPlaying && !audio.paused) {
       audio.pause();
     }
-  }, [isPlaying, currentSong, setIsPlaying]);
+  }, [isPlaying, currentSong]);
 
   // Sync volume and mute changes directly to HTML5 audio element
   useEffect(() => {
