@@ -5,8 +5,26 @@ import { usePlayerStore } from '@/store/useStore';
 import { refreshStreamUrl, api } from '@/lib/api';
 import ReactPlayer from 'react-player';
 
-const getPlayableUrl = (url: string) => {
-  if (!url) return '';
+const getPlayableUrl = (song: any) => {
+  if (!song) return '';
+  const url = song.url || '';
+
+  // If the stream URL points to the backend /api/yt/stream endpoint,
+  // extract the YouTube video_id and use YouTube watch URL so ReactPlayer
+  // can stream native media directly on the client without backend fallback.
+  if (url.includes('/api/yt/stream')) {
+    const match = url.match(/video_id=([^&]+)/);
+    const videoId = match ? match[1] : song.id;
+    if (videoId && videoId.length >= 5) {
+      return `https://www.youtube.com/watch?v=${videoId}`;
+    }
+  }
+
+  // If song ID is a YouTube ID (e.g. 11 characters) and URL is not a direct static sample MP3
+  if (song.id && song.id.length === 11 && !url.includes('soundhelix.com') && !url.endsWith('.mp3') && !url.endsWith('.m4a')) {
+    return `https://www.youtube.com/watch?v=${song.id}`;
+  }
+
   // Upgrade remote HTTP URLs to HTTPS to prevent Mixed Content blocking in browsers
   // and App Transport Security (ATS) / Cleartext blocks on native devices.
   if (url.startsWith('http://') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
@@ -214,7 +232,7 @@ export default function AudioPlayer() {
 
     retryCountRef.current[songId] = retries + 1;
 
-    const isYoutubeUrl = currentSong.url.includes('youtube.com') || currentSong.url.includes('youtu.be') || currentSong.url.includes('googlevideo.com') || currentSong.url.includes('/api/yt/stream');
+    const isYoutubeUrl = currentSong.url.includes('youtube.com') || currentSong.url.includes('youtu.be') || currentSong.url.includes('googlevideo.com') || currentSong.url.includes('/api/yt/stream') || (currentSong.id && currentSong.id.length === 11);
     if (!isYoutubeUrl) {
       console.warn(`Playback error on static/mock song ${songId}. Retrying once directly without refresh...`);
       if (retries === 0) {
@@ -255,19 +273,25 @@ export default function AudioPlayer() {
 
   if (!isMounted) return null;
 
-  const isYouTube = currentSong?.url ? (currentSong.url.includes('youtube.com') || currentSong.url.includes('youtu.be')) : false;
-  const isSoundCloud = currentSong?.url ? currentSong.url.includes('soundcloud.com') : false;
-  const isStream = currentSong?.url ? currentSong.url.includes('/api/yt/stream') : false;
+  const playableUrl = getPlayableUrl(currentSong);
+  const isYouTube = playableUrl.includes('youtube.com') || playableUrl.includes('youtu.be');
+  const isSoundCloud = playableUrl.includes('soundcloud.com');
   const PlayerComponent = ReactPlayer as any;
 
   return (
     <PlayerComponent
       ref={playerRef}
-      url={getPlayableUrl(currentSong?.url || '')}
+      url={playableUrl}
       playing={isPlaying}
       volume={volume}
       muted={isMuted}
       config={{
+        youtube: {
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+          }
+        },
         file: {
           forceAudio: !isYouTube && !isSoundCloud,
           attributes: {
