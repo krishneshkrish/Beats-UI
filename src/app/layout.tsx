@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import '@/lib/patchFetch';
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
 import { AudioProvider } from '@/context/AudioContext';
