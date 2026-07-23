@@ -1,5 +1,5 @@
 import { Innertube } from 'youtubei.js';
-import { refreshStreamUrl } from './api';
+import { refreshStreamUrl, API_BASE_URL } from './api';
 
 let ytInstance: any = null;
 
@@ -9,8 +9,6 @@ async function getInnertubeInstance() {
   }
 
   if (!ytInstance) {
-    const origin = window.location.origin;
-
     ytInstance = await Innertube.create({
       fetch: async (input, init) => {
         let urlStr = '';
@@ -20,28 +18,64 @@ async function getInnertubeInstance() {
           urlStr = input.url;
         }
 
-        // Intercept and route InnerTube API calls via the Next.js local rewrite proxy to bypass CORS
-        if (urlStr.includes('youtubei/v1')) {
-          const parsedUrl = new URL(urlStr);
-          const newUrl = `${origin}/yt-api${parsedUrl.pathname.replace('/youtubei/v1', '')}${parsedUrl.search}`;
+        // Check if we are running in a browser environment (subject to CORS)
+        // and NOT running in a Capacitor native context (which allows direct fetch)
+        const isCapacitor = typeof window !== 'undefined' && (window as any).Capacitor;
+        const isBrowser = typeof window !== 'undefined' && !isCapacitor;
 
-          if (typeof input === 'string') {
-            input = newUrl;
-          } else if (input instanceof Request) {
-            input = new Request(newUrl, input);
-          }
-        } else if (urlStr.startsWith('https://www.youtube.com') || urlStr.startsWith('https://youtubei.googleapis.com')) {
-          // Route general YouTube scrapes and pages through the local /yt-www rewrite proxy
-          const parsedUrl = new URL(urlStr);
-          const newUrl = `${origin}/yt-www${parsedUrl.pathname}${parsedUrl.search}`;
+        if (isBrowser) {
+          try {
+            // Forward InnerTube and YouTube requests through the backend CORS proxy
+            const proxyUrl = `${API_BASE_URL}/api/yt/proxy`;
+            
+            // Re-map request headers to a plain object
+            const headers: Record<string, string> = {};
+            if (init?.headers) {
+              if (init.headers instanceof Headers) {
+                init.headers.forEach((value, key) => {
+                  headers[key] = value;
+                });
+              } else if (Array.isArray(init.headers)) {
+                init.headers.forEach(([key, value]) => {
+                  headers[key] = value;
+                });
+              } else {
+                Object.assign(headers, init.headers);
+              }
+            }
 
-          if (typeof input === 'string') {
-            input = newUrl;
-          } else if (input instanceof Request) {
-            input = new Request(newUrl, input);
+            // Extract body if present
+            let body: any = null;
+            if (init?.body) {
+              if (typeof init.body === 'string') {
+                body = init.body;
+              } else if (init.body instanceof URLSearchParams) {
+                body = init.body.toString();
+              } else {
+                body = init.body;
+              }
+            }
+
+            const response = await fetch(proxyUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                url: urlStr,
+                method: init?.method || 'GET',
+                headers: headers,
+                body: body,
+              }),
+            });
+
+            return response;
+          } catch (proxyErr) {
+            console.error('CORS proxy fetch failed:', proxyErr);
           }
         }
 
+        // Fallback to direct fetch (useful for Capacitor or local environments without backend)
         return fetch(input, init);
       }
     });
