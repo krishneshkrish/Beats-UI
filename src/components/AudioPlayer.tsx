@@ -179,7 +179,7 @@ export default function AudioPlayer() {
     };
   }, []);
 
-  // Sync track change onto persistent HTML5 <audio> element
+  // Unified HTML5 Audio Source and Playback State Synchronizer
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -187,39 +187,36 @@ export default function AudioPlayer() {
     if (!currentSong) {
       audio.src = '';
       setProgress(0);
+      if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'none';
+      }
       return;
     }
 
     const playableUrl = getPlayableUrl(currentSong);
-    if (audio.src !== playableUrl) {
+    const isSourceChanged = audio.src !== playableUrl;
+
+    if (isSourceChanged) {
       audio.src = playableUrl;
       audio.load();
-
-      if (isPlaying) {
-        audio.play().catch((err) => {
-          console.warn('Autoplay blocked on track load:', err);
-        });
-      }
     }
-  }, [currentSong, isPlaying, setProgress]);
-
-  // Sync play/pause state changes
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !currentSong) return;
 
     if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
       navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
     }
 
-    if (isPlaying && audio.paused) {
-      audio.play().catch((err) => {
-        console.warn('Playback error on user gesture / state toggle:', err);
-      });
-    } else if (!isPlaying && !audio.paused) {
-      audio.pause();
+    if (isPlaying) {
+      if (audio.paused || isSourceChanged) {
+        audio.play().catch((err) => {
+          console.warn('Playback request failed or blocked:', err);
+        });
+      }
+    } else {
+      if (!audio.paused) {
+        audio.pause();
+      }
     }
-  }, [isPlaying, currentSong]);
+  }, [currentSong, isPlaying, setProgress]);
 
   // Sync volume and mute changes directly to HTML5 audio element
   useEffect(() => {
