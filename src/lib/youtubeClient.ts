@@ -28,8 +28,20 @@ if (typeof window !== 'undefined' && !window.hasOwnProperty('__beats_fetch_patch
       try {
         const proxyUrl = `${API_BASE_URL}/api/yt/proxy`;
         
+        // Resolve method
+        const method = init?.method || (input instanceof Request ? input.method : 'GET');
+        
         // Re-map request headers to a plain object
         const headers: Record<string, string> = {};
+        
+        // Extract headers from input if it is a Request object
+        if (input instanceof Request) {
+          input.headers.forEach((value, key) => {
+            headers[key] = value;
+          });
+        }
+        
+        // Extract headers from init (takes precedence)
         if (init?.headers) {
           if (init.headers instanceof Headers) {
             init.headers.forEach((value, key) => {
@@ -54,6 +66,10 @@ if (typeof window !== 'undefined' && !window.hasOwnProperty('__beats_fetch_patch
           } else {
             body = init.body;
           }
+        } else if (input instanceof Request) {
+          try {
+            body = await input.clone().text();
+          } catch (_) {}
         }
 
         const response = await originalFetch(proxyUrl, {
@@ -63,7 +79,7 @@ if (typeof window !== 'undefined' && !window.hasOwnProperty('__beats_fetch_patch
           },
           body: JSON.stringify({
             url: urlStr,
-            method: init?.method || 'GET',
+            method: method,
             headers: headers,
             body: body,
           }),
