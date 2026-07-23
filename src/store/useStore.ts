@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Song, TimelineItem } from '../types';
 import { setMoodAPI } from '../lib/api';
+import { resolveAudioStream } from '../lib/youtubeClient';
 
 const SESSION_ID = typeof window !== 'undefined'
   ? Math.random().toString(36).substring(2, 15)
@@ -32,6 +33,7 @@ interface PlayerState {
   setLyricsActiveLine: (line: number) => void;
   setQueue: (queue: Song[]) => void;
   appendToQueue: (songs: Song[]) => void;
+  bufferUpcomingQueue: (currentIndex: number) => Promise<void>;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -46,6 +48,34 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   lyricsActiveLine: 0,
   seekToTime: null,
 
+  bufferUpcomingQueue: async (currentIndex) => {
+    const { queue } = get();
+    if (queue.length === 0) return;
+
+    // Buffer current track + next 3 tracks (Rolling 3-Track Buffer)
+    const tracksToBuffer = queue.slice(currentIndex, currentIndex + 4);
+
+    const promises = tracksToBuffer.map(async (track) => {
+      if (track.resolvedUrl) return;
+
+      try {
+        const resolvedUrl = await resolveAudioStream(track.id);
+        set((state) => ({
+          queue: state.queue.map((s) =>
+            s.id === track.id ? { ...s, resolvedUrl } : s
+          ),
+          currentSong: state.currentSong?.id === track.id 
+            ? { ...state.currentSong, resolvedUrl } 
+            : state.currentSong
+        }));
+      } catch (err) {
+        console.error(`Failed to buffer stream for track ${track.id}:`, err);
+      }
+    });
+
+    await Promise.allSettled(promises);
+  },
+
   playTrack: (song, queue) => {
     const activeQueue = queue || get().queue;
     const finalQueue = activeQueue.some(s => s.id === song.id)
@@ -59,6 +89,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queue: finalQueue,
       lyricsActiveLine: 0
     });
+
+    const currIndex = finalQueue.findIndex(s => s.id === song.id);
+    if (currIndex !== -1) {
+      get().bufferUpcomingQueue(currIndex);
+    }
   },
 
   togglePlay: () => set(state => ({ isPlaying: !state.isPlaying })),
@@ -98,6 +133,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const nextSong = queue[nextIndex];
     if (nextSong) {
       set({ currentSong: nextSong, progress: 0, isPlaying: true, lyricsActiveLine: 0 });
+      get().bufferUpcomingQueue(nextIndex);
     }
   },
 
@@ -122,17 +158,36 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const prevSong = queue[prevIndex];
     if (prevSong) {
       set({ currentSong: prevSong, progress: 0, isPlaying: true, lyricsActiveLine: 0 });
+      get().bufferUpcomingQueue(prevIndex);
     }
   },
 
   setLyricsActiveLine: (lyricsActiveLine) => set({ lyricsActiveLine }),
-  setQueue: (queue) => set({ queue }),
-  appendToQueue: (songs) => set((state) => ({
-    queue: [
-      ...state.queue,
-      ...songs.filter(s => !state.queue.some(q => q.id === s.id))
-    ]
-  }))
+  setQueue: (queue) => {
+    set({ queue });
+    const { currentSong } = get();
+    if (currentSong) {
+      const currIndex = queue.findIndex(s => s.id === currentSong.id);
+      if (currIndex !== -1) {
+        get().bufferUpcomingQueue(currIndex);
+      }
+    }
+  },
+  appendToQueue: (songs) => {
+    set((state) => ({
+      queue: [
+        ...state.queue,
+        ...songs.filter(s => !state.queue.some(q => q.id === s.id))
+      ]
+    }));
+    const { queue, currentSong } = get();
+    if (currentSong) {
+      const currIndex = queue.findIndex(s => s.id === currentSong.id);
+      if (currIndex !== -1) {
+        get().bufferUpcomingQueue(currIndex);
+      }
+    }
+  }
 }));
 
 interface MoodState {

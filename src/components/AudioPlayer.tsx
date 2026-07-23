@@ -2,49 +2,30 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { usePlayerStore } from '@/store/useStore';
-import { refreshStreamUrl, api } from '@/lib/api';
+import { resolveAudioStream } from '@/lib/youtubeClient';
 import { Song } from '@/types';
-
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 
 const getPlayableUrl = (song: Song | null): string => {
   if (!song) return '';
-
-  // 1. Return pre-fetched direct streaming URL if already resolved
   if (song.resolvedUrl) {
     return song.resolvedUrl;
   }
-
   const url = song.url || '';
-
-  // 2. Format backend direct audio stream proxy URLs (/api/yt/stream)
-  if (url.startsWith('/api/yt/stream')) {
-    return `${API_BASE_URL}${url}`;
+  // Support direct local/mock MP3 links without YouTube extraction
+  if (url.endsWith('.mp3')) {
+    return url;
   }
-
-  // 3. For YouTube track IDs or non-static URLs, route to backend direct audio stream proxy endpoint
-  if (song.id && (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('/api/yt/stream') || !url.endsWith('.mp3'))) {
-    return `${API_BASE_URL}/api/yt/stream?video_id=${song.id}`;
-  }
-
-  // 4. Upgrade remote HTTP URLs to HTTPS to prevent Mixed Content blocking
-  if (url.startsWith('http://') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
-    return url.replace('http://', 'https://');
-  }
-
-  return url;
+  return '';
 };
 
 export default function AudioPlayer() {
   const [isMounted, setIsMounted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const retryCountRef = useRef<Record<string, number>>({});
-  const prefetchedRef = useRef<Set<string>>(new Set());
 
   const {
     currentSong,
     isPlaying,
-    progress,
     volume,
     isMuted,
     setProgress,
@@ -54,6 +35,8 @@ export default function AudioPlayer() {
     setLyricsActiveLine,
     seekToTime,
     seekTo,
+    queue,
+    isRepeat,
   } = usePlayerStore();
 
   useEffect(() => {
@@ -81,7 +64,7 @@ export default function AudioPlayer() {
     }
   }, []);
 
-  // Complete MediaSession API Binding & Metadata Sync
+  // Sync Native MediaSession Controls & Info
   useEffect(() => {
     if (!currentSong || typeof window === 'undefined' || !('mediaSession' in navigator)) return;
 
@@ -96,21 +79,17 @@ export default function AudioPlayer() {
           { src: artworkSrc, sizes: '128x128', type: 'image/jpeg' },
           { src: artworkSrc, sizes: '192x192', type: 'image/jpeg' },
           { src: artworkSrc, sizes: '256x256', type: 'image/jpeg' },
-          { src: artworkSrc, sizes: '384x384', type: 'image/jpeg' },
           { src: artworkSrc, sizes: '512x512', type: 'image/jpeg' },
         ],
       });
 
-      // Register all four mandatory action handlers plus seekto with direct audio invocation
       navigator.mediaSession.setActionHandler('play', async () => {
         const audio = audioRef.current;
         setIsPlaying(true);
         if (audio && audio.paused) {
           try {
             await audio.play();
-            if ('mediaSession' in navigator) {
-              navigator.mediaSession.playbackState = 'playing';
-            }
+            navigator.mediaSession.playbackState = 'playing';
           } catch (err) {
             console.error('Lock screen play action error:', err);
           }
@@ -122,9 +101,7 @@ export default function AudioPlayer() {
         setIsPlaying(false);
         if (audio && !audio.paused) {
           audio.pause();
-          if ('mediaSession' in navigator) {
-            navigator.mediaSession.playbackState = 'paused';
-          }
+          navigator.mediaSession.playbackState = 'paused';
         }
       });
 
@@ -145,9 +122,6 @@ export default function AudioPlayer() {
           seekTo(details.seekTime);
         }
       });
-
-      navigator.mediaSession.setActionHandler('seekforward', null);
-      navigator.mediaSession.setActionHandler('seekbackward', null);
     } catch (err) {
       console.error('Failed to configure MediaSession API:', err);
     }
@@ -179,7 +153,7 @@ export default function AudioPlayer() {
     };
   }, []);
 
-  // Unified HTML5 Audio Source and Playback State Synchronizer
+  // Unified HTML5 Audio Source and Playback State Synchronizer with client-side resolution
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -193,29 +167,63 @@ export default function AudioPlayer() {
       return;
     }
 
-    const playableUrl = getPlayableUrl(currentSong);
-    const isSourceChanged = audio.src !== playableUrl;
+    let active = true;
 
-    if (isSourceChanged) {
-      audio.src = playableUrl;
-      audio.load();
-    }
+    const playOrLoad = async () => {
+      let playableUrl = getPlayableUrl(currentSong);
 
-    if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-    }
+      // On-the-fly client-side resolution if direct stream URL isn't pre-resolved yet
+      if (!playableUrl && currentSong.id) {
+        try {
+          playableUrl = await resolveAudioStream(currentSong.id);
+          
+          if (!active) return; // Exit if another song was selected in the meantime
 
-    if (isPlaying) {
-      if (audio.paused || isSourceChanged) {
-        audio.play().catch((err) => {
-          console.warn('Playback request failed or blocked:', err);
-        });
+          usePlayerStore.setState((state) => ({
+            currentSong: state.currentSong?.id === currentSong.id
+              ? { ...state.currentSong, resolvedUrl: playableUrl }
+              : state.currentSong,
+            queue: state.queue.map((s) =>
+              s.id === currentSong.id ? { ...s, resolvedUrl: playableUrl } : s
+            )
+          }));
+        } catch (err) {
+          console.error('On-the-fly client stream resolution failed:', err);
+          return;
+        }
       }
-    } else {
-      if (!audio.paused) {
-        audio.pause();
+
+      if (!active || !playableUrl) return;
+
+      const isSourceChanged = audio.src !== playableUrl;
+
+      if (isSourceChanged) {
+        audio.src = playableUrl;
+        audio.load();
       }
-    }
+
+      if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+      }
+
+      if (isPlaying) {
+        if (audio.paused || isSourceChanged) {
+          audio.play().catch((err) => {
+            console.warn('Playback request failed or blocked:', err);
+          });
+        }
+      } else {
+        if (!audio.paused) {
+          audio.pause();
+        }
+      }
+    };
+
+    playOrLoad();
+
+    return () => {
+      active = false;
+    };
   }, [currentSong, isPlaying, setProgress]);
 
   // Sync volume and mute changes directly to HTML5 audio element
@@ -256,27 +264,6 @@ export default function AudioPlayer() {
     };
   }, []);
 
-  // Prefetch next track stream URL when remaining duration <= 20 seconds
-  const prefetchNextTrackUrl = useCallback(async (nextTrack: Song) => {
-    try {
-      let resolvedUrl: string = getPlayableUrl(nextTrack);
-      if (!resolvedUrl || resolvedUrl === nextTrack.url) {
-        const refreshResult = await refreshStreamUrl(nextTrack.id, 'youtube');
-        if (refreshResult && refreshResult.url) {
-          resolvedUrl = getPlayableUrl({ ...nextTrack, url: refreshResult.url });
-        }
-      }
-
-      if (resolvedUrl) {
-        usePlayerStore.setState((state) => ({
-          queue: state.queue.map(s => s.id === nextTrack.id ? { ...s, resolvedUrl } : s)
-        }));
-      }
-    } catch (e) {
-      console.error('Prefetch queue track URL failed:', e);
-    }
-  }, []);
-
   // HTML5 Audio Event Handlers
   const handleLoadedMetadata = () => {
     const audio = audioRef.current;
@@ -303,23 +290,14 @@ export default function AudioPlayer() {
     setProgress(currentProgress);
     updatePositionState(currentProgress, currentSong.duration || audio.duration);
 
-    // Prefetch Queue Engine: When remaining song time <= 20s, pre-resolve next track stream URL
+    // Continuous Rolling Buffer Trigger: check/refresh upcoming buffer when 20s remaining
     const duration = currentSong.duration || audio.duration || 0;
     const remainingTime = duration - currentProgress;
 
     if (remainingTime <= 20 && remainingTime > 0) {
-      const { queue, isShuffle } = usePlayerStore.getState();
       const currIndex = queue.findIndex(s => s.id === currentSong.id);
-      let nextIndex = currIndex + 1;
-      if (isShuffle) {
-        nextIndex = Math.floor(Math.random() * queue.length);
-      }
-      if (nextIndex < queue.length) {
-        const nextTrackObj = queue[nextIndex];
-        if (nextTrackObj && !nextTrackObj.resolvedUrl && !prefetchedRef.current.has(nextTrackObj.id)) {
-          prefetchedRef.current.add(nextTrackObj.id);
-          prefetchNextTrackUrl(nextTrackObj);
-        }
+      if (currIndex !== -1) {
+        usePlayerStore.getState().bufferUpcomingQueue(currIndex);
       }
     }
 
@@ -354,13 +332,14 @@ export default function AudioPlayer() {
     }
   };
 
+  // Self-Healing URL Expiration Loop: refresh streaming link on error (up to 3 retries)
   const handleError = async () => {
     if (!currentSong) return;
     const songId = currentSong.id;
     const retries = retryCountRef.current[songId] || 0;
 
     if (retries >= 3) {
-      console.error(`Failed to play track ${songId} after 3 refresh attempts.`);
+      console.error(`Failed to play track ${songId} after 3 client-side resolution attempts.`);
       setIsPlaying(false);
       return;
     }
@@ -368,27 +347,25 @@ export default function AudioPlayer() {
     retryCountRef.current[songId] = retries + 1;
 
     try {
-      const refreshResult = await refreshStreamUrl(songId, 'youtube');
-      if (refreshResult && refreshResult.url) {
-        const newPlayableUrl = getPlayableUrl({ ...currentSong, url: refreshResult.url });
-        usePlayerStore.setState((state) => {
-          if (state.currentSong && state.currentSong.id === songId) {
-            const updatedSong = { ...state.currentSong, url: refreshResult.url, resolvedUrl: newPlayableUrl };
-            const updatedQueue = state.queue.map(s => s.id === songId ? updatedSong : s);
-            return { currentSong: updatedSong, queue: updatedQueue };
-          }
-          return {};
-        });
+      const resolvedUrl = await resolveAudioStream(songId);
+      
+      usePlayerStore.setState((state) => ({
+        currentSong: state.currentSong?.id === songId
+          ? { ...state.currentSong, resolvedUrl }
+          : state.currentSong,
+        queue: state.queue.map((s) =>
+          s.id === songId ? { ...s, resolvedUrl } : s
+        )
+      }));
 
-        const audio = audioRef.current;
-        if (audio) {
-          audio.src = newPlayableUrl;
-          audio.load();
-          audio.play().catch(e => console.warn('Play after error refresh blocked:', e));
-        }
+      const audio = audioRef.current;
+      if (audio) {
+        audio.src = resolvedUrl;
+        audio.load();
+        audio.play().catch(e => console.warn('Play after self-healing resolution blocked:', e));
       }
     } catch (refreshErr) {
-      console.error('Error refreshing stream URL:', refreshErr);
+      console.error('Error in self-healing stream resolution:', refreshErr);
     }
   };
 
@@ -398,7 +375,7 @@ export default function AudioPlayer() {
     <audio
       ref={audioRef}
       playsInline={true}
-      preload="metadata"
+      preload="auto"
       onLoadedMetadata={handleLoadedMetadata}
       onTimeUpdate={handleTimeUpdate}
       onEnded={handleEnded}
@@ -407,4 +384,3 @@ export default function AudioPlayer() {
     />
   );
 }
-

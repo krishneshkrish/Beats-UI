@@ -14,6 +14,14 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  async rewrites() {
+    return [
+      {
+        source: '/yt-api/:path*',
+        destination: 'https://www.youtube.com/youtubei/v1/:path*',
+      },
+    ];
+  },
 };
 
 export default withPWA(nextConfig);
