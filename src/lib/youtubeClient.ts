@@ -1,4 +1,5 @@
 import { Innertube } from 'youtubei.js';
+import { refreshStreamUrl } from './api';
 
 let ytInstance: any = null;
 
@@ -23,6 +24,16 @@ async function getInnertubeInstance() {
         if (urlStr.includes('youtubei/v1')) {
           const parsedUrl = new URL(urlStr);
           const newUrl = `${origin}/yt-api${parsedUrl.pathname.replace('/youtubei/v1', '')}${parsedUrl.search}`;
+
+          if (typeof input === 'string') {
+            input = newUrl;
+          } else if (input instanceof Request) {
+            input = new Request(newUrl, input);
+          }
+        } else if (urlStr.startsWith('https://www.youtube.com') || urlStr.startsWith('https://youtubei.googleapis.com')) {
+          // Route general YouTube scrapes and pages through the local /yt-www rewrite proxy
+          const parsedUrl = new URL(urlStr);
+          const newUrl = `${origin}/yt-www${parsedUrl.pathname}${parsedUrl.search}`;
 
           if (typeof input === 'string') {
             input = newUrl;
@@ -63,7 +74,19 @@ export async function resolveAudioStream(videoId: string): Promise<string> {
 
     return resolvedUrl;
   } catch (error) {
-    console.error(`Error resolving client-side audio stream for ${videoId}:`, error);
+    console.warn(`Client-side extraction failed for ${videoId}. Falling back to backend stream resolver...`, error);
+    try {
+      const refreshResult = await refreshStreamUrl(videoId, 'youtube');
+      if (refreshResult && refreshResult.url) {
+        let finalUrl = refreshResult.url;
+        if (finalUrl.startsWith('http://') && !finalUrl.includes('localhost') && !finalUrl.includes('127.0.0.1')) {
+          finalUrl = finalUrl.replace('http://', 'https://');
+        }
+        return finalUrl;
+      }
+    } catch (fallbackError) {
+      console.error(`Backend stream resolver fallback also failed for ${videoId}:`, fallbackError);
+    }
     throw error;
   }
 }

@@ -18,7 +18,11 @@ const nextConfig = {
     return [
       {
         source: '/yt-api/:path*',
-        destination: 'https://www.youtube.com/youtubei/v1/:path*',
+        destination: 'https://youtubei.googleapis.com/youtubei/v1/:path*',
+      },
+      {
+        source: '/yt-www/:path*',
+        destination: 'https://www.youtube.com/:path*',
       },
     ];
   },
