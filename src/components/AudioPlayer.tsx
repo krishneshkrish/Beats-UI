@@ -189,6 +189,7 @@ export default function AudioPlayer() {
           }));
         } catch (err) {
           console.error('On-the-fly client stream resolution failed:', err);
+          setIsPlaying(false);
           return;
         }
       }
@@ -224,7 +225,7 @@ export default function AudioPlayer() {
     return () => {
       active = false;
     };
-  }, [currentSong, isPlaying, setProgress]);
+  }, [currentSong, isPlaying, setProgress, setIsPlaying]);
 
   // Sync volume and mute changes directly to HTML5 audio element
   useEffect(() => {

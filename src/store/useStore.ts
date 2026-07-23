@@ -52,8 +52,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const { queue } = get();
     if (queue.length === 0) return;
 
-    // Buffer current track + next 3 tracks (Rolling 3-Track Buffer)
-    const tracksToBuffer = queue.slice(currentIndex, currentIndex + 4);
+    // Buffer current track + next 3 tracks (Rolling 3-Track Buffer) with loop wrap-around support
+    const bufferSize = Math.min(4, queue.length);
+    const tracksToBuffer: Song[] = [];
+    for (let i = 0; i < bufferSize; i++) {
+      const idx = (currentIndex + i) % queue.length;
+      if (!tracksToBuffer.some((t) => t.id === queue[idx].id)) {
+        tracksToBuffer.push(queue[idx]);
+      }
+    }
 
     const promises = tracksToBuffer.map(async (track) => {
       if (track.resolvedUrl) return;
