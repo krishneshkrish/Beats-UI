@@ -1,94 +1,72 @@
-import { API_BASE_URL } from './api';
+/**
+ * patchFetch.ts
+ * ─────────────
+ * Intercepts all YouTube / InnerTube API fetch calls made by youtubei.js and
+ * routes them through the Next.js /yt-api/ and /yt-www/ server-side rewrites.
+ *
+ * WHY: Browsers block direct XHR to youtubei.googleapis.com with a CORS error.
+ *      Next.js rewrites run on Vercel's Edge and are transparent to the browser.
+ *
+ * NOTE: This ONLY runs in browser context (window exists). SSR is untouched.
+ */
 
-if (typeof window !== 'undefined' && !window.hasOwnProperty('__beats_fetch_patched__')) {
+if (typeof window !== 'undefined' && !(window as any).__beats_fetch_patched__) {
   (window as any).__beats_fetch_patched__ = true;
-  
-  const originalFetch = window.fetch;
-  window.fetch = async function (input, init) {
+
+  const originalFetch = window.fetch.bind(window);
+
+  window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     let urlStr = '';
     if (typeof input === 'string') {
       urlStr = input;
     } else if (input instanceof URL) {
       urlStr = input.toString();
-    } else if (input && typeof input === 'object' && 'url' in input) {
-      urlStr = (input as any).url;
+    } else if (input instanceof Request) {
+      urlStr = input.url;
     }
 
-    const isCapacitor = (window as any).Capacitor;
-    const isBrowser = !isCapacitor;
+    // Already a rewritten / local URL — pass through unmodified
+    if (!urlStr || urlStr.startsWith('/') || urlStr.startsWith(window.location.origin)) {
+      return originalFetch(input, init);
+    }
 
-    const isYouTubeUrl = urlStr.includes('youtubei.googleapis.com') || 
-                         urlStr.includes('googleapis.com/youtubei') ||
-                         urlStr.includes('youtube.com') ||
-                         urlStr.includes('ytimg.com');
-
-    if (isBrowser && isYouTubeUrl && !urlStr.includes('/api/yt/proxy')) {
+    // ── Route InnerTube API calls through Vercel rewrite (/yt-api/) ──────────
+    if (
+      urlStr.includes('youtubei.googleapis.com/youtubei/v1/') ||
+      urlStr.includes('googleapis.com/youtubei/v1/')
+    ) {
       try {
-        const proxyUrl = `${API_BASE_URL}/api/yt/proxy`;
+        const parsed = new URL(urlStr);
+        // Strip the host and leading path, keep everything from /youtubei/v1/ onwards
+        const afterV1 = parsed.pathname.replace(/^\/youtubei\/v1/, '');
+        const rewrittenUrl = `/yt-api${afterV1}${parsed.search}`;
         
-        // Resolve method
-        const method = init?.method || (input instanceof Request ? input.method : 'GET');
+        // Clone the init but strip headers that the browser will set automatically
+        const safeInit = init ? { ...init } : {};
         
-        // Re-map request headers to a plain object
-        const headers: Record<string, string> = {};
-        
-        // Extract headers from input if it is a Request object
-        if (input instanceof Request) {
-          input.headers.forEach((value, key) => {
-            headers[key] = value;
-          });
-        }
-        
-        // Extract headers from init (takes precedence)
-        if (init?.headers) {
-          if (init.headers instanceof Headers) {
-            init.headers.forEach((value, key) => {
-              headers[key] = value;
-            });
-          } else if (Array.isArray(init.headers)) {
-            init.headers.forEach(([key, value]) => {
-              headers[key] = value;
-            });
-          } else {
-            Object.assign(headers, init.headers);
-          }
-        }
-
-        // Extract body if present
-        let body: any = null;
-        if (init?.body) {
-          if (typeof init.body === 'string') {
-            body = init.body;
-          } else if (init.body instanceof URLSearchParams) {
-            body = init.body.toString();
-          } else {
-            body = init.body;
-          }
-        } else if (input instanceof Request) {
-          try {
-            body = await input.clone().text();
-          } catch (_) {}
-        }
-
-        const response = await originalFetch(proxyUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            url: urlStr,
-            method: method,
-            headers: headers,
-            body: body,
-          }),
-        });
-
-        return response;
-      } catch (proxyErr) {
-        console.error('Global CORS proxy fetch failed for:', urlStr, proxyErr);
+        return await originalFetch(rewrittenUrl, safeInit);
+      } catch (err) {
+        console.warn('[patchFetch] /yt-api/ rewrite failed, falling back to direct fetch:', err);
+        // Fall through to original fetch below
       }
     }
 
+    // ── Route youtube.com page requests through /yt-www/ rewrite ─────────────
+    if (
+      urlStr.includes('www.youtube.com/') &&
+      !urlStr.includes('youtubei.googleapis.com')
+    ) {
+      try {
+        const parsed = new URL(urlStr);
+        const rewrittenUrl = `/yt-www${parsed.pathname}${parsed.search}`;
+        const safeInit = init ? { ...init } : {};
+        return await originalFetch(rewrittenUrl, safeInit);
+      } catch (err) {
+        console.warn('[patchFetch] /yt-www/ rewrite failed, falling back to direct fetch:', err);
+      }
+    }
+
+    // All other requests pass through unchanged
     return originalFetch(input, init);
   };
 }

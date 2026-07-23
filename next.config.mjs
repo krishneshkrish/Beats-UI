@@ -10,16 +10,16 @@ const withPWA = withPWAInit({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'export',
-  images: {
-    unoptimized: true,
-  },
+  // NOTE: 'output: export' removed — static export disables Next.js rewrites/middleware.
+  // The app runs as a full Vercel server deployment (PWA) to enable the /yt-api/ proxy rewrites.
   async rewrites() {
     return [
+      // Proxy InnerTube API calls through Vercel to bypass CORS (used by youtubei.js)
       {
         source: '/yt-api/:path*',
         destination: 'https://youtubei.googleapis.com/youtubei/v1/:path*',
       },
+      // Proxy youtube.com pages (player JS, etc.)
       {
         source: '/yt-www/:path*',
         destination: 'https://www.youtube.com/:path*',
