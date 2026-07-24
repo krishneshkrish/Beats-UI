@@ -14,6 +14,8 @@ async function getInnertube(): Promise<Innertube> {
             'com.google.ios.youtube/19.09.3 (iPhone; CPU iPhone OS 17_4 like Mac OS X; en_US)'
           );
         }
+        reqHeaders.set('Origin', 'https://www.youtube.com');
+        reqHeaders.set('Referer', 'https://www.youtube.com/');
         return fetch(input, { ...init, headers: reqHeaders });
       },
     }).catch((err) => {
@@ -93,30 +95,31 @@ async function resolveStreamUrl(videoId: string): Promise<{ status: string; url:
     console.error(`[api/stream] Innertube extraction error for ${videoId}:`, err);
   }
 
-  // 2. Fallback Guard: Query FastAPI backend
-  const fastApiBase = process.env.FASTAPI_URL || 'http://localhost:8000';
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
+  // 2. Fallback Guard: Query FastAPI backend if FASTAPI_URL environment variable is set
+  if (process.env.FASTAPI_URL) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-    const fastApiRes = await fetch(`${fastApiBase}/api/yt/stream?video_id=${encodeURIComponent(videoId)}`, {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' },
-    });
-    clearTimeout(timeoutId);
+      const fastApiRes = await fetch(`${process.env.FASTAPI_URL}/api/yt/stream?video_id=${encodeURIComponent(videoId)}`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      clearTimeout(timeoutId);
 
-    if (fastApiRes.ok) {
-      const data = await fastApiRes.json();
-      const backendUrl = data?.url || data?.stream_url || data?.data?.url;
-      if (backendUrl && typeof backendUrl === 'string' && !backendUrl.includes('soundhelix.com')) {
-        const secureUrl = backendUrl.startsWith('http://')
-          ? backendUrl.replace('http://', 'https://')
-          : backendUrl;
-        return { status: 'success', url: secureUrl };
+      if (fastApiRes.ok) {
+        const data = await fastApiRes.json();
+        const backendUrl = data?.url || data?.stream_url || data?.data?.url;
+        if (backendUrl && typeof backendUrl === 'string' && !backendUrl.includes('soundhelix.com')) {
+          const secureUrl = backendUrl.startsWith('http://')
+            ? backendUrl.replace('http://', 'https://')
+            : backendUrl;
+          return { status: 'success', url: secureUrl };
+        }
       }
+    } catch (fastApiErr) {
+      console.warn(`[api/stream] FastAPI backend fallback failed for ${videoId}:`, fastApiErr);
     }
-  } catch (fastApiErr) {
-    console.warn(`[api/stream] FastAPI backend fallback failed for ${videoId}:`, fastApiErr);
   }
 
   // 3. Secondary Fallback: Public Piped resolvers

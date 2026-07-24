@@ -5,7 +5,20 @@ let ytPromise: Promise<Innertube> | null = null;
 
 async function getInnertube(): Promise<Innertube> {
   if (!ytPromise) {
-    ytPromise = Innertube.create().catch((err) => {
+    ytPromise = Innertube.create({
+      fetch: (input, init) => {
+        const reqHeaders = new Headers(init?.headers);
+        if (!reqHeaders.has('User-Agent')) {
+          reqHeaders.set(
+            'User-Agent',
+            'com.google.ios.youtube/19.09.3 (iPhone; CPU iPhone OS 17_4 like Mac OS X; en_US)'
+          );
+        }
+        reqHeaders.set('Origin', 'https://www.youtube.com');
+        reqHeaders.set('Referer', 'https://www.youtube.com/');
+        return fetch(input, { ...init, headers: reqHeaders });
+      },
+    }).catch((err) => {
       ytPromise = null;
       throw err;
     });
@@ -44,7 +57,7 @@ async function resolveStreamForVideo(videoId: string): Promise<{ status: string;
   // 1. Primary: Extract unenciphered M4A/AAC stream using Innertube IOS/MWEB client
   try {
     const yt = await getInnertube();
-    const clients = ['IOS', 'MWEB'];
+    const clients = ['IOS', 'MWEB', 'ANDROID'];
 
     for (const clientName of clients) {
       try {
@@ -84,36 +97,41 @@ async function resolveStreamForVideo(videoId: string): Promise<{ status: string;
     console.error(`[api/yt/refresh] Primary Innertube extraction error for ${videoId}:`, err);
   }
 
-  // 2. Fallback Guard: Query FastAPI backend (${FASTAPI_URL}/api/yt/stream?video_id=${id})
-  const fastApiBase = process.env.FASTAPI_URL || 'http://localhost:8000';
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
+  // 2. Fallback Guard: Query FastAPI backend if FASTAPI_URL is set
+  if (process.env.FASTAPI_URL) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-    const fastApiRes = await fetch(`${fastApiBase}/api/yt/stream?video_id=${encodeURIComponent(videoId)}`, {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' },
-    });
-    clearTimeout(timeoutId);
+      const fastApiRes = await fetch(`${process.env.FASTAPI_URL}/api/yt/stream?video_id=${encodeURIComponent(videoId)}`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      clearTimeout(timeoutId);
 
-    if (fastApiRes.ok) {
-      const data = await fastApiRes.json();
-      const backendUrl = data?.url || data?.stream_url || data?.data?.url;
-      if (backendUrl && typeof backendUrl === 'string') {
-        const secureUrl = backendUrl.startsWith('http://')
-          ? backendUrl.replace('http://', 'https://')
-          : backendUrl;
-        return { status: 'success', url: secureUrl };
+      if (fastApiRes.ok) {
+        const data = await fastApiRes.json();
+        const backendUrl = data?.url || data?.stream_url || data?.data?.url;
+        if (backendUrl && typeof backendUrl === 'string') {
+          const secureUrl = backendUrl.startsWith('http://')
+            ? backendUrl.replace('http://', 'https://')
+            : backendUrl;
+          return { status: 'success', url: secureUrl };
+        }
       }
+    } catch (fastApiErr) {
+      console.warn(`[api/yt/refresh] FastAPI backend fallback failed for ${videoId}:`, fastApiErr);
     }
-  } catch (fastApiErr) {
-    console.warn(`[api/yt/refresh] FastAPI backend fallback failed for ${videoId}:`, fastApiErr);
   }
 
-  // 3. Secondary Fallback: Try public Piped/Invidious stream proxies
+  // 3. Secondary Fallback: Try public Piped stream proxies
   const resolvers = [
-    `https://pipedapi.in.projectsegfau.lt/streams/${videoId}`,
-    `https://inv.riverside.rocks/api/v1/videos/${videoId}`,
+    `https://pipedapi.palvelu.org/streams/${videoId}`,
+    `https://pipedapi.mha.fi/streams/${videoId}`,
+    `https://pipedapi.drgns.space/streams/${videoId}`,
+    `https://piped-api.garudalinux.org/streams/${videoId}`,
+    `https://pipedapi.lunar.icu/streams/${videoId}`,
+    `https://api.piped.yt/streams/${videoId}`,
   ];
 
   for (const resolverUrl of resolvers) {
@@ -156,7 +174,7 @@ async function resolveStreamForVideo(videoId: string): Promise<{ status: string;
   const fallbackIndex = ((hash % 8) + 1).toString();
   const fallbackUrl = MOCK_FALLBACK_STREAMS[fallbackIndex] || DEFAULT_FALLBACK;
 
-  return { status: 'success', url: fallbackUrl };
+  return { status: 'fallback', url: fallbackUrl };
 }
 
 export async function GET(request: NextRequest) {
