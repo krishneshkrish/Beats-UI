@@ -65,6 +65,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const promises = tracksToBuffer.map(async (track) => {
       if (track.resolvedUrl) return;
 
+      if (track.url && (track.url.startsWith('http://') || track.url.startsWith('https://'))) {
+        set((state) => ({
+          queue: state.queue.map((s) =>
+            s.id === track.id ? { ...s, resolvedUrl: track.url } : s
+          ),
+          currentSong: state.currentSong?.id === track.id
+            ? { ...state.currentSong, resolvedUrl: track.url }
+            : state.currentSong
+        }));
+        return;
+      }
+
       try {
         const resolvedUrl = await resolveAudioStream(track.id);
         set((state) => ({

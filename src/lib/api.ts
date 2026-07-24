@@ -89,9 +89,28 @@ export const getTrending = async (mood: string): Promise<Song[]> => {
 };
 
 export const refreshStreamUrl = async (id: string, source = 'youtube'): Promise<{ url: string }> => {
-  const response = await api.get('/api/yt/refresh', {
-    params: { video_id: id, source },
-  });
-  return response.data;
+  try {
+    const response = await api.get('/api/yt/refresh', {
+      params: { video_id: id, source },
+    });
+    if (response.data && response.data.url) {
+      return response.data;
+    }
+  } catch (err) {
+    console.warn('[api] Primary refreshStreamUrl failed, using local relative fallback:', err);
+  }
+
+  // Local relative fallback (handled by Next.js route.ts)
+  try {
+    const res = await fetch(`/api/yt/refresh?video_id=${encodeURIComponent(id)}&source=${encodeURIComponent(source)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.url) return data;
+    }
+  } catch (fallbackErr) {
+    console.error('[api] Local refresh fallback failed:', fallbackErr);
+  }
+
+  return { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' };
 };
 

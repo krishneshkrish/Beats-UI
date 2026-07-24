@@ -11,8 +11,8 @@ const getPlayableUrl = (song: Song | null): string => {
     return song.resolvedUrl;
   }
   const url = song.url || '';
-  // Support direct local/mock MP3 links without YouTube extraction
-  if (url.endsWith('.mp3')) {
+  // Support direct HTTP/HTTPS links (including MP3, M4A, soundhelix, etc.)
+  if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
   return '';
