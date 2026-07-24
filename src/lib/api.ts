@@ -77,15 +77,49 @@ export const searchAPI = async (q: string, type?: string): Promise<SearchResult>
 
 export const searchMedia = async (q: string, source: string, limit = 5): Promise<Song[]> => {
   const endpoint = source === 'youtube' ? '/api/yt/search' : '/api/search';
-  const response = await api.get(endpoint, { params: { q, source, limit } });
-  const data = response.data;
-  return Array.isArray(data) ? data : (data?.songs || data || []);
+  try {
+    const response = await api.get(endpoint, { params: { q, source, limit } });
+    const data = response.data;
+    const result = Array.isArray(data) ? data : (data?.songs || data || []);
+    if (result && result.length > 0) return result;
+  } catch (err) {
+    console.warn('[api] searchMedia primary call failed, trying relative route:', err);
+  }
+
+  try {
+    const res = await fetch(`/api/yt/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+    if (res.ok) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : (data?.songs || []);
+    }
+  } catch (fallbackErr) {
+    console.error('[api] searchMedia relative fallback failed:', fallbackErr);
+  }
+
+  return [];
 };
 
 export const getTrending = async (mood: string): Promise<Song[]> => {
-  const response = await api.get('/api/yt/trending', { params: { mood } });
-  const data = response.data;
-  return Array.isArray(data) ? data : (data?.songs || data || []);
+  try {
+    const response = await api.get('/api/yt/trending', { params: { mood } });
+    const data = response.data;
+    const result = Array.isArray(data) ? data : (data?.songs || data || []);
+    if (result && result.length > 0) return result;
+  } catch (err) {
+    console.warn('[api] getTrending primary call failed, trying relative route:', err);
+  }
+
+  try {
+    const res = await fetch(`/api/yt/trending?mood=${encodeURIComponent(mood)}`);
+    if (res.ok) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : (data?.songs || []);
+    }
+  } catch (fallbackErr) {
+    console.error('[api] getTrending relative fallback failed:', fallbackErr);
+  }
+
+  return [];
 };
 
 export const refreshStreamUrl = async (id: string, source = 'youtube'): Promise<{ url: string }> => {

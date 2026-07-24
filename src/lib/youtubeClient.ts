@@ -54,48 +54,46 @@ export async function resolveAudioStream(videoId: string): Promise<string> {
     return videoId;
   }
 
-  // 2. Numeric mock song ID check (avoid unnecessary YouTube InnerTube calls)
+  // 2. Numeric mock song ID check (avoid unnecessary YouTube calls)
   if (MOCK_STREAMS[videoId]) {
     return MOCK_STREAMS[videoId];
   }
 
-  // 3. Primary: client-side youtubei.js via Vercel rewrite
-  try {
-    const yt = await getInnertubeInstance();
-    const info = await yt.getBasicInfo(videoId);
-
-    // Prefer audio-only M4A (AAC) for maximum iOS / Android compatibility
-    const format = info.chooseFormat({ type: 'audio', quality: 'best' }) || info.chooseFormat({ type: 'audio' });
-    
-    if (format) {
-      if (format.url && typeof format.url === 'string') {
-        return format.url;
-      }
-      try {
-        const deciphered = format.decipher(yt.session.player);
-        const url = typeof deciphered === 'string' ? deciphered : await deciphered;
-        if (url && typeof url === 'string') return url;
-      } catch (decipherError) {
-        console.warn(`[youtubeClient] Decipher failed for ${videoId}:`, decipherError);
-      }
-    }
-  } catch (primaryError) {
-    console.warn(`[youtubeClient] Primary resolution failed for ${videoId}:`, primaryError);
-  }
-
-  // 4. Secondary: serverless refresh route with multi-mirror resolver
+  // 3. Primary: Call serverless /api/yt/refresh endpoint (extracts direct M4A AAC streams)
   try {
     const result = await refreshStreamUrl(videoId, 'youtube');
-    if (result?.url) {
+    if (result?.url && typeof result.url === 'string') {
       return result.url.startsWith('http://')
         ? result.url.replace('http://', 'https://')
         : result.url;
     }
-  } catch (fallbackError) {
-    console.warn(`[youtubeClient] Stream refresh fallback failed for ${videoId}:`, fallbackError);
+  } catch (refreshError) {
+    console.warn(`[youtubeClient] /api/yt/refresh call failed for ${videoId}:`, refreshError);
   }
 
-  // 5. Guaranteed fallback audio stream (never throws 502 or breaks audio player)
+  // 4. Secondary: Client-side youtubei.js IOS player fallback
+  try {
+    const yt = await getInnertubeInstance();
+    const playerRes = await yt.actions.execute('/player', {
+      videoId,
+      client: 'IOS',
+      parse: false,
+    });
+
+    const formats = playerRes?.data?.streamingData?.adaptiveFormats || [];
+    const audioFormats = formats.filter((f: any) => f?.mimeType?.includes('audio') && f?.url);
+
+    if (audioFormats.length > 0) {
+      const m4aFormat = audioFormats.find((f: any) => f.mimeType.includes('audio/mp4')) || audioFormats[0];
+      if (m4aFormat?.url) {
+        return m4aFormat.url;
+      }
+    }
+  } catch (primaryError) {
+    console.warn(`[youtubeClient] Client-side Innertube IOS extraction failed for ${videoId}:`, primaryError);
+  }
+
+  // 5. Guaranteed fallback audio stream to prevent player freeze
   const hash = Array.from(videoId).reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const fallbackIndex = ((hash % 8) + 1).toString();
   return MOCK_STREAMS[fallbackIndex] || MOCK_STREAMS['1'];
