@@ -401,7 +401,7 @@ export default function AudioPlayer() {
     <audio
       ref={audioRef}
       playsInline={true}
-      preload="auto"
+      preload="metadata"
       onLoadedMetadata={handleLoadedMetadata}
       onTimeUpdate={handleTimeUpdate}
       onEnded={handleEnded}

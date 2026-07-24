@@ -59,7 +59,22 @@ export async function resolveAudioStream(videoId: string): Promise<string> {
     return MOCK_STREAMS[videoId];
   }
 
-  // 3. Primary: Call serverless /api/yt/refresh endpoint (extracts direct M4A AAC streams)
+  // 3. Primary: Call serverless /api/stream endpoint (extracts direct M4A AAC streams)
+  try {
+    const res = await fetch(`/api/stream?videoId=${encodeURIComponent(videoId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.url && typeof data.url === 'string') {
+        return data.url.startsWith('http://')
+          ? data.url.replace('http://', 'https://')
+          : data.url;
+      }
+    }
+  } catch (streamErr) {
+    console.warn(`[youtubeClient] /api/stream call failed for ${videoId}:`, streamErr);
+  }
+
+  // 4. Secondary: Call /api/yt/refresh endpoint fallback
   try {
     const result = await refreshStreamUrl(videoId, 'youtube');
     if (result?.url && typeof result.url === 'string') {
