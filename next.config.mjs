@@ -17,7 +17,7 @@ const nextConfig = {
       // Proxy InnerTube API calls through Vercel to bypass CORS (used by youtubei.js)
       {
         source: '/yt-api/:path*',
-        destination: 'https://youtubei.googleapis.com/youtubei/v1/:path*',
+        destination: 'https://www.youtube.com/youtubei/v1/:path*',
       },
       // Proxy youtube.com pages (player JS, etc.)
       {

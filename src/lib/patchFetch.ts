@@ -4,7 +4,7 @@
  * Intercepts all YouTube / InnerTube API fetch calls made by youtubei.js and
  * routes them through the Next.js /yt-api/ and /yt-www/ server-side rewrites.
  *
- * WHY: Browsers block direct XHR to youtubei.googleapis.com with a CORS error.
+ * WHY: Browsers block direct XHR to www.youtube.com with a CORS error.
  *      Next.js rewrites run on Vercel's Edge and are transparent to the browser.
  *
  * NOTE: This ONLY runs in browser context (window exists). SSR is untouched.
@@ -37,12 +37,16 @@ if (typeof window !== 'undefined' && !(window as any).__beats_fetch_patched__) {
         const v1Idx = parsed.pathname.indexOf('/youtubei/v1');
         const afterV1 = parsed.pathname.substring(v1Idx + '/youtubei/v1'.length);
         const rewrittenPath = `/yt-api${afterV1}${parsed.search}`;
-        const fullUrl = `${window.location.origin}${rewrittenPath}`;
 
-        if (input instanceof Request) {
-          return await originalFetch(new Request(fullUrl, input), init);
+        if (typeof input === 'string') {
+          return await originalFetch(rewrittenPath, init);
+        } else if (input instanceof URL) {
+          return await originalFetch(new URL(rewrittenPath, window.location.origin).toString(), init);
+        } else if (input instanceof Request) {
+          const targetUrl = new URL(rewrittenPath, window.location.origin).toString();
+          const newReq = new Request(targetUrl, input);
+          return await originalFetch(newReq);
         }
-        return await originalFetch(fullUrl, init);
       } catch (err) {
         console.warn('[patchFetch] /yt-api/ rewrite failed, falling back to direct fetch:', err);
       }
@@ -53,12 +57,16 @@ if (typeof window !== 'undefined' && !(window as any).__beats_fetch_patched__) {
       try {
         const parsed = new URL(urlStr);
         const rewrittenPath = `/yt-www${parsed.pathname}${parsed.search}`;
-        const fullUrl = `${window.location.origin}${rewrittenPath}`;
 
-        if (input instanceof Request) {
-          return await originalFetch(new Request(fullUrl, input), init);
+        if (typeof input === 'string') {
+          return await originalFetch(rewrittenPath, init);
+        } else if (input instanceof URL) {
+          return await originalFetch(new URL(rewrittenPath, window.location.origin).toString(), init);
+        } else if (input instanceof Request) {
+          const targetUrl = new URL(rewrittenPath, window.location.origin).toString();
+          const newReq = new Request(targetUrl, input);
+          return await originalFetch(newReq);
         }
-        return await originalFetch(fullUrl, init);
       } catch (err) {
         console.warn('[patchFetch] /yt-www/ rewrite failed, falling back to direct fetch:', err);
       }
