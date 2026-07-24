@@ -123,6 +123,33 @@ export const getTrending = async (mood: string): Promise<Song[]> => {
 };
 
 export const refreshStreamUrl = async (id: string, source = 'youtube'): Promise<{ url: string }> => {
+  // 1. Try POST request to /api/yt/refresh
+  try {
+    const res = await fetch('/api/yt/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId: id, source }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.url) return data;
+    }
+  } catch (postErr) {
+    console.warn('[api] POST /api/yt/refresh failed, trying GET fallback:', postErr);
+  }
+
+  // 2. Try GET request with video_id query param
+  try {
+    const res = await fetch(`/api/yt/refresh?video_id=${encodeURIComponent(id)}&source=${encodeURIComponent(source)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.url) return data;
+    }
+  } catch (getErr) {
+    console.warn('[api] GET /api/yt/refresh fallback failed, trying external backend:', getErr);
+  }
+
+  // 3. Try external backend api instance
   try {
     const response = await api.get('/api/yt/refresh', {
       params: { video_id: id, source },
@@ -131,18 +158,7 @@ export const refreshStreamUrl = async (id: string, source = 'youtube'): Promise<
       return response.data;
     }
   } catch (err) {
-    console.warn('[api] Primary refreshStreamUrl failed, using local relative fallback:', err);
-  }
-
-  // Local relative fallback (handled by Next.js route.ts)
-  try {
-    const res = await fetch(`/api/yt/refresh?video_id=${encodeURIComponent(id)}&source=${encodeURIComponent(source)}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.url) return data;
-    }
-  } catch (fallbackErr) {
-    console.error('[api] Local refresh fallback failed:', fallbackErr);
+    console.warn('[api] External backend refreshStreamUrl failed:', err);
   }
 
   return { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' };

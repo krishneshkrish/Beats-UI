@@ -65,7 +65,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const promises = tracksToBuffer.map(async (track) => {
       if (track.resolvedUrl) return;
 
-      if (track.url && (track.url.startsWith('http://') || track.url.startsWith('https://'))) {
+      const isDirectAudio =
+        track.url &&
+        (track.url.startsWith('http://') || track.url.startsWith('https://')) &&
+        !track.url.includes('youtube.com/watch') &&
+        !track.url.includes('youtu.be/');
+
+      if (isDirectAudio) {
         set((state) => ({
           queue: state.queue.map((s) =>
             s.id === track.id ? { ...s, resolvedUrl: track.url } : s
@@ -78,7 +84,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
 
       try {
-        const resolvedUrl = await resolveAudioStream(track.id);
+        const targetId =
+          track.id && !track.id.startsWith('http://') && !track.id.startsWith('https://')
+            ? track.id
+            : track.url?.match(/v=([a-zA-Z0-9_-]{11})/)?.[1] || track.id;
+
+        const resolvedUrl = await resolveAudioStream(targetId);
         set((state) => ({
           queue: state.queue.map((s) =>
             s.id === track.id ? { ...s, resolvedUrl } : s

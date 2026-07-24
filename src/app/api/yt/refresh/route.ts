@@ -26,17 +26,19 @@ const MOCK_FALLBACK_STREAMS: Record<string, string> = {
 
 const DEFAULT_FALLBACK = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const videoId = searchParams.get('video_id') || searchParams.get('id') || '';
-
+async function resolveStreamForVideo(videoId: string): Promise<{ status: string; url: string }> {
   if (!videoId) {
-    return NextResponse.json({ url: DEFAULT_FALLBACK, status: 'fallback' });
+    return { status: 'success', url: DEFAULT_FALLBACK };
+  }
+
+  // Direct HTTP/HTTPS audio URL check
+  if (videoId.startsWith('http://') || videoId.startsWith('https://')) {
+    return { status: 'success', url: videoId };
   }
 
   // Handle numeric mock IDs
   if (MOCK_FALLBACK_STREAMS[videoId]) {
-    return NextResponse.json({ url: MOCK_FALLBACK_STREAMS[videoId], status: 'mock' });
+    return { status: 'success', url: MOCK_FALLBACK_STREAMS[videoId] };
   }
 
   // 1. Primary: Extract unenciphered M4A/AAC stream using Innertube IOS/MWEB client
@@ -55,22 +57,23 @@ export async function GET(request: NextRequest) {
         const data = playerRes?.data;
         const formats =
           data?.streamingData?.adaptiveFormats || data?.streamingData?.formats || [];
-        
+
         const audioFormats = formats.filter(
           (f: any) => f?.mimeType?.includes('audio') && f?.url
         );
 
         if (audioFormats.length > 0) {
-          // Prefer M4A (audio/mp4) for native iOS Safari & WebKit background playback
+          // Prefer M4A (audio/mp4 / format 140) for native iOS Safari WebKit background playback
           const m4aFormat =
-            audioFormats.find((f: any) => f.mimeType.includes('audio/mp4')) || audioFormats[0];
+            audioFormats.find((f: any) => f.mimeType?.includes('audio/mp4') || f.itag === 140) ||
+            audioFormats[0];
 
           if (m4aFormat?.url && typeof m4aFormat.url === 'string') {
             const secureUrl = m4aFormat.url.startsWith('http://')
               ? m4aFormat.url.replace('http://', 'https://')
               : m4aFormat.url;
 
-            return NextResponse.json({ url: secureUrl, status: 'resolved' });
+            return { status: 'success', url: secureUrl };
           }
         }
       } catch (clientErr) {
@@ -81,7 +84,33 @@ export async function GET(request: NextRequest) {
     console.error(`[api/yt/refresh] Primary Innertube extraction error for ${videoId}:`, err);
   }
 
-  // 2. Secondary Fallback: Try public Piped stream proxies
+  // 2. Fallback Guard: Query FastAPI backend (${FASTAPI_URL}/api/yt/stream?video_id=${id})
+  const fastApiBase = process.env.FASTAPI_URL || 'http://localhost:8000';
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    const fastApiRes = await fetch(`${fastApiBase}/api/yt/stream?video_id=${encodeURIComponent(videoId)}`, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    clearTimeout(timeoutId);
+
+    if (fastApiRes.ok) {
+      const data = await fastApiRes.json();
+      const backendUrl = data?.url || data?.stream_url || data?.data?.url;
+      if (backendUrl && typeof backendUrl === 'string') {
+        const secureUrl = backendUrl.startsWith('http://')
+          ? backendUrl.replace('http://', 'https://')
+          : backendUrl;
+        return { status: 'success', url: secureUrl };
+      }
+    }
+  } catch (fastApiErr) {
+    console.warn(`[api/yt/refresh] FastAPI backend fallback failed for ${videoId}:`, fastApiErr);
+  }
+
+  // 3. Secondary Fallback: Try public Piped/Invidious stream proxies
   const resolvers = [
     `https://pipedapi.in.projectsegfau.lt/streams/${videoId}`,
     `https://inv.riverside.rocks/api/v1/videos/${videoId}`,
@@ -114,18 +143,40 @@ export async function GET(request: NextRequest) {
           const secureUrl = audioUrl.startsWith('http://')
             ? audioUrl.replace('http://', 'https://')
             : audioUrl;
-          return NextResponse.json({ url: secureUrl, status: 'resolved' });
+          return { status: 'success', url: secureUrl };
         }
       }
     } catch {
-      // Ignore fallback error
+      // Ignore public proxy fallback error
     }
   }
 
-  // 3. Guaranteed fallback stream to prevent audio player freeze
+  // 4. Guaranteed fallback stream
   const hash = Array.from(videoId).reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const fallbackIndex = ((hash % 8) + 1).toString();
   const fallbackUrl = MOCK_FALLBACK_STREAMS[fallbackIndex] || DEFAULT_FALLBACK;
 
-  return NextResponse.json({ url: fallbackUrl, status: 'fallback' });
+  return { status: 'success', url: fallbackUrl };
+}
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const videoId = searchParams.get('video_id') || searchParams.get('id') || '';
+  const result = await resolveStreamForVideo(videoId);
+  return NextResponse.json(result);
+}
+
+export async function POST(request: NextRequest) {
+  let videoId = '';
+  try {
+    const body = await request.json();
+    videoId = body?.videoId || body?.video_id || body?.id || '';
+  } catch {
+    // If body parsing fails, check query params
+    const { searchParams } = new URL(request.url);
+    videoId = searchParams.get('video_id') || searchParams.get('id') || '';
+  }
+
+  const result = await resolveStreamForVideo(videoId);
+  return NextResponse.json(result);
 }

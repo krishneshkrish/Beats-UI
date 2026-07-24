@@ -5,14 +5,35 @@ import { usePlayerStore } from '@/store/useStore';
 import { resolveAudioStream } from '@/lib/youtubeClient';
 import { Song } from '@/types';
 
+const extractVideoId = (song: Song | null): string => {
+  if (!song) return '';
+  if (song.id && !song.id.startsWith('http://') && !song.id.startsWith('https://')) {
+    return song.id;
+  }
+  const url = song.url || '';
+  if (url.includes('v=')) {
+    const match = url.match(/v=([a-zA-Z0-9_-]{11})/);
+    if (match) return match[1];
+  }
+  if (url.includes('youtu.be/')) {
+    const match = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+    if (match) return match[1];
+  }
+  return song.id || '';
+};
+
 const getPlayableUrl = (song: Song | null): string => {
   if (!song) return '';
   if (song.resolvedUrl) {
     return song.resolvedUrl;
   }
   const url = song.url || '';
-  // Support direct HTTP/HTTPS links (including MP3, M4A, soundhelix, etc.)
-  if (url.startsWith('http://') || url.startsWith('https://')) {
+  // Support direct audio stream URLs (e.g. soundhelix, .mp3, .m4a, googlevideo stream links)
+  if (
+    (url.startsWith('http://') || url.startsWith('https://')) &&
+    !url.includes('youtube.com/watch') &&
+    !url.includes('youtu.be/')
+  ) {
     return url;
   }
   return '';
@@ -173,24 +194,27 @@ export default function AudioPlayer() {
       let playableUrl = getPlayableUrl(currentSong);
 
       // On-the-fly client-side resolution if direct stream URL isn't pre-resolved yet
-      if (!playableUrl && currentSong.id) {
-        try {
-          playableUrl = await resolveAudioStream(currentSong.id);
-          
-          if (!active) return; // Exit if another song was selected in the meantime
+      if (!playableUrl && currentSong) {
+        const videoId = extractVideoId(currentSong);
+        if (videoId) {
+          try {
+            playableUrl = await resolveAudioStream(videoId);
+            
+            if (!active) return; // Exit if another song was selected in the meantime
 
-          usePlayerStore.setState((state) => ({
-            currentSong: state.currentSong?.id === currentSong.id
-              ? { ...state.currentSong, resolvedUrl: playableUrl }
-              : state.currentSong,
-            queue: state.queue.map((s) =>
-              s.id === currentSong.id ? { ...s, resolvedUrl: playableUrl } : s
-            )
-          }));
-        } catch (err) {
-          console.error('On-the-fly client stream resolution failed:', err);
-          setIsPlaying(false);
-          return;
+            usePlayerStore.setState((state) => ({
+              currentSong: state.currentSong?.id === currentSong.id
+                ? { ...state.currentSong, resolvedUrl: playableUrl }
+                : state.currentSong,
+              queue: state.queue.map((s) =>
+                s.id === currentSong.id ? { ...s, resolvedUrl: playableUrl } : s
+              )
+            }));
+          } catch (err) {
+            console.error('On-the-fly stream resolution failed:', err);
+            setIsPlaying(false);
+            return;
+          }
         }
       }
 
@@ -340,7 +364,7 @@ export default function AudioPlayer() {
     const retries = retryCountRef.current[songId] || 0;
 
     if (retries >= 3) {
-      console.error(`Failed to play track ${songId} after 3 client-side resolution attempts.`);
+      console.error(`Failed to play track ${songId} after 3 stream resolution attempts.`);
       setIsPlaying(false);
       return;
     }
@@ -348,7 +372,8 @@ export default function AudioPlayer() {
     retryCountRef.current[songId] = retries + 1;
 
     try {
-      const resolvedUrl = await resolveAudioStream(songId);
+      const targetId = extractVideoId(currentSong);
+      const resolvedUrl = await resolveAudioStream(targetId);
       
       usePlayerStore.setState((state) => ({
         currentSong: state.currentSong?.id === songId
