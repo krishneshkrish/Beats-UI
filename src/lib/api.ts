@@ -39,9 +39,9 @@ export const logPlay = async (payload: {
   return response.data;
 };
 
-export const getAiRecommendations = async (context = 'discover'): Promise<Song[]> => {
-  const response = await api.get('/api/recommendations-ai', {
-    params: { context },
+export const getAiRecommendations = async (context = 'discover', username?: string): Promise<Song[]> => {
+  const response = await api.get('/api/recommendations', {
+    params: { context, username },
   });
   return Array.isArray(response.data) ? response.data : (response.data?.songs || response.data || []);
 };
