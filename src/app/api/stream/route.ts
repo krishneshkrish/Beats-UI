@@ -119,10 +119,14 @@ async function resolveStreamUrl(videoId: string): Promise<{ status: string; url:
     console.warn(`[api/stream] FastAPI backend fallback failed for ${videoId}:`, fastApiErr);
   }
 
-  // 3. Secondary Fallback: Public Piped/Invidious resolvers
+  // 3. Secondary Fallback: Public Piped resolvers
   const resolvers = [
-    `https://pipedapi.in.projectsegfau.lt/streams/${videoId}`,
-    `https://inv.riverside.rocks/api/v1/videos/${videoId}`,
+    `https://pipedapi.palvelu.org/streams/${videoId}`,
+    `https://pipedapi.mha.fi/streams/${videoId}`,
+    `https://pipedapi.drgns.space/streams/${videoId}`,
+    `https://piped-api.garudalinux.org/streams/${videoId}`,
+    `https://pipedapi.lunar.icu/streams/${videoId}`,
+    `https://api.piped.yt/streams/${videoId}`,
   ];
 
   for (const resolverUrl of resolvers) {

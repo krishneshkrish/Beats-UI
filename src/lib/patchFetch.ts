@@ -38,8 +38,10 @@ if (typeof window !== 'undefined' && !(window as any).__beats_fetch_patched__) {
         const afterV1 = parsed.pathname.substring(v1Idx + '/youtubei/v1'.length);
         const rewrittenUrl = `/yt-api${afterV1}${parsed.search}`;
         
-        const safeInit = init ? { ...init } : {};
-        return await originalFetch(rewrittenUrl, safeInit);
+        if (input instanceof Request) {
+          return await originalFetch(new Request(rewrittenUrl, input), init);
+        }
+        return await originalFetch(rewrittenUrl, init);
       } catch (err) {
         console.warn('[patchFetch] /yt-api/ rewrite failed, falling back to direct fetch:', err);
       }
@@ -50,8 +52,10 @@ if (typeof window !== 'undefined' && !(window as any).__beats_fetch_patched__) {
       try {
         const parsed = new URL(urlStr);
         const rewrittenUrl = `/yt-www${parsed.pathname}${parsed.search}`;
-        const safeInit = init ? { ...init } : {};
-        return await originalFetch(rewrittenUrl, safeInit);
+        if (input instanceof Request) {
+          return await originalFetch(new Request(rewrittenUrl, input), init);
+        }
+        return await originalFetch(rewrittenUrl, init);
       } catch (err) {
         console.warn('[patchFetch] /yt-www/ rewrite failed, falling back to direct fetch:', err);
       }
