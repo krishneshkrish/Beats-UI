@@ -36,12 +36,13 @@ if (typeof window !== 'undefined' && !(window as any).__beats_fetch_patched__) {
         const parsed = new URL(urlStr);
         const v1Idx = parsed.pathname.indexOf('/youtubei/v1');
         const afterV1 = parsed.pathname.substring(v1Idx + '/youtubei/v1'.length);
-        const rewrittenUrl = `/yt-api${afterV1}${parsed.search}`;
-        
+        const rewrittenPath = `/yt-api${afterV1}${parsed.search}`;
+        const fullUrl = `${window.location.origin}${rewrittenPath}`;
+
         if (input instanceof Request) {
-          return await originalFetch(new Request(rewrittenUrl, input), init);
+          return await originalFetch(new Request(fullUrl, input), init);
         }
-        return await originalFetch(rewrittenUrl, init);
+        return await originalFetch(fullUrl, init);
       } catch (err) {
         console.warn('[patchFetch] /yt-api/ rewrite failed, falling back to direct fetch:', err);
       }
@@ -51,11 +52,13 @@ if (typeof window !== 'undefined' && !(window as any).__beats_fetch_patched__) {
     if (urlStr.includes('www.youtube.com/')) {
       try {
         const parsed = new URL(urlStr);
-        const rewrittenUrl = `/yt-www${parsed.pathname}${parsed.search}`;
+        const rewrittenPath = `/yt-www${parsed.pathname}${parsed.search}`;
+        const fullUrl = `${window.location.origin}${rewrittenPath}`;
+
         if (input instanceof Request) {
-          return await originalFetch(new Request(rewrittenUrl, input), init);
+          return await originalFetch(new Request(fullUrl, input), init);
         }
-        return await originalFetch(rewrittenUrl, init);
+        return await originalFetch(fullUrl, init);
       } catch (err) {
         console.warn('[patchFetch] /yt-www/ rewrite failed, falling back to direct fetch:', err);
       }
