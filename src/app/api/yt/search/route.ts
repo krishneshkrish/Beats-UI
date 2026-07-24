@@ -6,7 +6,18 @@ let ytPromise: Promise<Innertube> | null = null;
 
 async function getInnertube(): Promise<Innertube> {
   if (!ytPromise) {
-    ytPromise = Innertube.create().catch((err) => {
+    ytPromise = Innertube.create({
+      fetch: (input, init) => {
+        const reqHeaders = new Headers(init?.headers);
+        if (!reqHeaders.has('User-Agent')) {
+          reqHeaders.set(
+            'User-Agent',
+            'com.google.ios.youtube/19.09.3 (iPhone; CPU iPhone OS 17_4 like Mac OS X; en_US)'
+          );
+        }
+        return fetch(input, { ...init, headers: reqHeaders });
+      },
+    }).catch((err) => {
       ytPromise = null;
       throw err;
     });
@@ -30,10 +41,10 @@ export async function GET(request: NextRequest) {
 
     if (videos.length > 0) {
       const songs = videos.map((v: any) => {
-        const videoId = v.id || '';
+        const videoId = v.id || v.videoId || '';
         const title = typeof v.title === 'string' ? v.title : (v.title?.text || 'Unknown Title');
         const artist = typeof v.author === 'string' ? v.author : (v.author?.name || 'YouTube Artist');
-        const duration = v.duration?.seconds || 180;
+        const duration = v.duration?.seconds || v.duration || 180;
         const artwork = v.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
         return {
@@ -50,7 +61,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(songs);
     }
   } catch (err) {
-    console.warn('[api/yt/search] YouTube search failed, using fallback catalog:', err);
+    console.warn('[api/yt/search] Primary InnerTube search error:', err);
+  }
+
+  // Secondary search: YouTube Music search
+  try {
+    const yt = await getInnertube();
+    const musicSearch = await yt.music.search(q, { type: 'song' });
+    const songsList = (musicSearch.songs?.contents || []).slice(0, limit);
+
+    if (songsList.length > 0) {
+      const songs = songsList.map((v: any) => {
+        const videoId = v.id || v.videoId || '';
+        const title = v.title || 'Unknown Title';
+        const artist = v.artists?.[0]?.name || 'YouTube Artist';
+        const duration = v.duration?.seconds || 180;
+        const artwork = v.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
+        return {
+          id: videoId,
+          title,
+          artist,
+          album: 'YouTube Music',
+          artwork,
+          duration,
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+        };
+      });
+
+      return NextResponse.json(songs);
+    }
+  } catch (musicErr) {
+    console.warn('[api/yt/search] Music search fallback error:', musicErr);
   }
 
   // Fallback catalog search

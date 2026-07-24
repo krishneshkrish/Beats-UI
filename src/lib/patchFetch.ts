@@ -31,31 +31,22 @@ if (typeof window !== 'undefined' && !(window as any).__beats_fetch_patched__) {
     }
 
     // ── Route InnerTube API calls through Vercel rewrite (/yt-api/) ──────────
-    if (
-      urlStr.includes('youtubei.googleapis.com/youtubei/v1/') ||
-      urlStr.includes('googleapis.com/youtubei/v1/')
-    ) {
+    if (urlStr.includes('/youtubei/v1/')) {
       try {
         const parsed = new URL(urlStr);
-        // Strip the host and leading path, keep everything from /youtubei/v1/ onwards
-        const afterV1 = parsed.pathname.replace(/^\/youtubei\/v1/, '');
+        const v1Idx = parsed.pathname.indexOf('/youtubei/v1');
+        const afterV1 = parsed.pathname.substring(v1Idx + '/youtubei/v1'.length);
         const rewrittenUrl = `/yt-api${afterV1}${parsed.search}`;
         
-        // Clone the init but strip headers that the browser will set automatically
         const safeInit = init ? { ...init } : {};
-        
         return await originalFetch(rewrittenUrl, safeInit);
       } catch (err) {
         console.warn('[patchFetch] /yt-api/ rewrite failed, falling back to direct fetch:', err);
-        // Fall through to original fetch below
       }
     }
 
-    // ── Route youtube.com page requests through /yt-www/ rewrite ─────────────
-    if (
-      urlStr.includes('www.youtube.com/') &&
-      !urlStr.includes('youtubei.googleapis.com')
-    ) {
+    // ── Route other youtube.com page requests through /yt-www/ rewrite ─────────
+    if (urlStr.includes('www.youtube.com/')) {
       try {
         const parsed = new URL(urlStr);
         const rewrittenUrl = `/yt-www${parsed.pathname}${parsed.search}`;
