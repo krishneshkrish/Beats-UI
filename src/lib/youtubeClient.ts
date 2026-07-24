@@ -64,7 +64,7 @@ export async function resolveAudioStream(videoId: string): Promise<string> {
     const res = await fetch(`/api/stream?videoId=${encodeURIComponent(videoId)}`);
     if (res.ok) {
       const data = await res.json();
-      if (data?.url && typeof data.url === 'string') {
+      if (data?.url && typeof data.url === 'string' && !data.url.includes('soundhelix.com')) {
         return data.url.startsWith('http://')
           ? data.url.replace('http://', 'https://')
           : data.url;
@@ -77,7 +77,7 @@ export async function resolveAudioStream(videoId: string): Promise<string> {
   // 4. Secondary: Call /api/yt/refresh endpoint fallback
   try {
     const result = await refreshStreamUrl(videoId, 'youtube');
-    if (result?.url && typeof result.url === 'string') {
+    if (result?.url && typeof result.url === 'string' && !result.url.includes('soundhelix.com')) {
       return result.url.startsWith('http://')
         ? result.url.replace('http://', 'https://')
         : result.url;
@@ -86,7 +86,7 @@ export async function resolveAudioStream(videoId: string): Promise<string> {
     console.warn(`[youtubeClient] /api/yt/refresh call failed for ${videoId}:`, refreshError);
   }
 
-  // 4. Secondary: Client-side youtubei.js IOS player fallback
+  // 5. Client-side youtubei.js IOS player extraction (uses user's residential client connection)
   try {
     const yt = await getInnertubeInstance();
     const playerRes = await yt.actions.execute('/player', {
@@ -95,13 +95,15 @@ export async function resolveAudioStream(videoId: string): Promise<string> {
       parse: false,
     });
 
-    const formats = playerRes?.data?.streamingData?.adaptiveFormats || [];
+    const formats = playerRes?.data?.streamingData?.adaptiveFormats || playerRes?.data?.streamingData?.formats || [];
     const audioFormats = formats.filter((f: any) => f?.mimeType?.includes('audio') && f?.url);
 
     if (audioFormats.length > 0) {
-      const m4aFormat = audioFormats.find((f: any) => f.mimeType.includes('audio/mp4')) || audioFormats[0];
-      if (m4aFormat?.url) {
-        return m4aFormat.url;
+      const m4aFormat = audioFormats.find((f: any) => f.itag === 140 || f.mimeType?.includes('audio/mp4')) || audioFormats[0];
+      if (m4aFormat?.url && typeof m4aFormat.url === 'string') {
+        return m4aFormat.url.startsWith('http://')
+          ? m4aFormat.url.replace('http://', 'https://')
+          : m4aFormat.url;
       }
     }
   } catch (primaryError) {

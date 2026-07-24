@@ -5,7 +5,18 @@ let ytPromise: Promise<Innertube> | null = null;
 
 async function getInnertube(): Promise<Innertube> {
   if (!ytPromise) {
-    ytPromise = Innertube.create().catch((err) => {
+    ytPromise = Innertube.create({
+      fetch: (input, init) => {
+        const reqHeaders = new Headers(init?.headers);
+        if (!reqHeaders.has('User-Agent')) {
+          reqHeaders.set(
+            'User-Agent',
+            'com.google.ios.youtube/19.09.3 (iPhone; CPU iPhone OS 17_4 like Mac OS X; en_US)'
+          );
+        }
+        return fetch(input, { ...init, headers: reqHeaders });
+      },
+    }).catch((err) => {
       ytPromise = null;
       throw err;
     });
@@ -26,23 +37,23 @@ const MOCK_FALLBACK_STREAMS: Record<string, string> = {
 
 const DEFAULT_FALLBACK = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
 
-async function resolveStreamUrl(videoId: string): Promise<string> {
-  if (!videoId) return DEFAULT_FALLBACK;
+async function resolveStreamUrl(videoId: string): Promise<{ status: string; url: string }> {
+  if (!videoId) return { status: 'fallback', url: DEFAULT_FALLBACK };
 
   // Direct HTTP/HTTPS audio URL check
   if (videoId.startsWith('http://') || videoId.startsWith('https://')) {
-    return videoId;
+    return { status: 'success', url: videoId };
   }
 
   // Handle numeric mock IDs
   if (MOCK_FALLBACK_STREAMS[videoId]) {
-    return MOCK_FALLBACK_STREAMS[videoId];
+    return { status: 'success', url: MOCK_FALLBACK_STREAMS[videoId] };
   }
 
   // 1. Primary Extractor: InnerTube server-side with client 'IOS' or 'MWEB'
   try {
     const yt = await getInnertube();
-    const clients = ['IOS', 'MWEB'];
+    const clients = ['IOS', 'MWEB', 'ANDROID'];
 
     for (const clientName of clients) {
       try {
@@ -68,9 +79,10 @@ async function resolveStreamUrl(videoId: string): Promise<string> {
             ) || audioFormats[0];
 
           if (m4aFormat?.url && typeof m4aFormat.url === 'string') {
-            return m4aFormat.url.startsWith('http://')
+            const secureUrl = m4aFormat.url.startsWith('http://')
               ? m4aFormat.url.replace('http://', 'https://')
               : m4aFormat.url;
+            return { status: 'success', url: secureUrl };
           }
         }
       } catch (clientErr) {
@@ -81,42 +93,7 @@ async function resolveStreamUrl(videoId: string): Promise<string> {
     console.error(`[api/stream] Innertube extraction error for ${videoId}:`, err);
   }
 
-  // 2. Fallback Extractor: Cobalt API (https://api.cobalt.tools/)
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-    const cobaltRes = await fetch('https://api.cobalt.tools/', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-      body: JSON.stringify({
-        url: `https://www.youtube.com/watch?v=${videoId}`,
-        downloadMode: 'audio',
-        audioFormat: 'mp3',
-      }),
-    });
-    clearTimeout(timeoutId);
-
-    if (cobaltRes.ok) {
-      const data = await cobaltRes.json();
-      const cobaltUrl = data?.url || data?.audio || data?.picker?.[0]?.url;
-      if (cobaltUrl && typeof cobaltUrl === 'string') {
-        return cobaltUrl.startsWith('http://')
-          ? cobaltUrl.replace('http://', 'https://')
-          : cobaltUrl;
-      }
-    }
-  } catch (cobaltErr) {
-    console.warn(`[api/stream] Cobalt API fallback failed for ${videoId}:`, cobaltErr);
-  }
-
-  // 3. Fallback Guard: Query FastAPI backend
+  // 2. Fallback Guard: Query FastAPI backend
   const fastApiBase = process.env.FASTAPI_URL || 'http://localhost:8000';
   try {
     const controller = new AbortController();
@@ -131,17 +108,18 @@ async function resolveStreamUrl(videoId: string): Promise<string> {
     if (fastApiRes.ok) {
       const data = await fastApiRes.json();
       const backendUrl = data?.url || data?.stream_url || data?.data?.url;
-      if (backendUrl && typeof backendUrl === 'string') {
-        return backendUrl.startsWith('http://')
+      if (backendUrl && typeof backendUrl === 'string' && !backendUrl.includes('soundhelix.com')) {
+        const secureUrl = backendUrl.startsWith('http://')
           ? backendUrl.replace('http://', 'https://')
           : backendUrl;
+        return { status: 'success', url: secureUrl };
       }
     }
   } catch (fastApiErr) {
     console.warn(`[api/stream] FastAPI backend fallback failed for ${videoId}:`, fastApiErr);
   }
 
-  // 4. Secondary Fallback: Public Piped resolvers
+  // 3. Secondary Fallback: Public Piped/Invidious resolvers
   const resolvers = [
     `https://pipedapi.in.projectsegfau.lt/streams/${videoId}`,
     `https://inv.riverside.rocks/api/v1/videos/${videoId}`,
@@ -171,9 +149,10 @@ async function resolveStreamUrl(videoId: string): Promise<string> {
           )?.url;
 
         if (audioUrl && typeof audioUrl === 'string') {
-          return audioUrl.startsWith('http://')
+          const secureUrl = audioUrl.startsWith('http://')
             ? audioUrl.replace('http://', 'https://')
             : audioUrl;
+          return { status: 'success', url: secureUrl };
         }
       }
     } catch {
@@ -181,10 +160,12 @@ async function resolveStreamUrl(videoId: string): Promise<string> {
     }
   }
 
-  // 5. Ultimate Mock Fallback
+  // 4. Ultimate Mock Fallback
   const hash = Array.from(videoId).reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const fallbackIndex = ((hash % 8) + 1).toString();
-  return MOCK_FALLBACK_STREAMS[fallbackIndex] || DEFAULT_FALLBACK;
+  const fallbackUrl = MOCK_FALLBACK_STREAMS[fallbackIndex] || DEFAULT_FALLBACK;
+
+  return { status: 'fallback', url: fallbackUrl };
 }
 
 export async function GET(request: NextRequest) {
@@ -195,12 +176,9 @@ export async function GET(request: NextRequest) {
     searchParams.get('id') ||
     '';
 
-  const directStreamUrl = await resolveStreamUrl(videoId);
+  const result = await resolveStreamUrl(videoId);
 
-  const response = NextResponse.json({
-    status: 'success',
-    url: directStreamUrl,
-  });
+  const response = NextResponse.json(result);
 
   response.headers.set(
     'Cache-Control',
@@ -220,12 +198,9 @@ export async function POST(request: NextRequest) {
     videoId = searchParams.get('videoId') || searchParams.get('video_id') || searchParams.get('id') || '';
   }
 
-  const directStreamUrl = await resolveStreamUrl(videoId);
+  const result = await resolveStreamUrl(videoId);
 
-  const response = NextResponse.json({
-    status: 'success',
-    url: directStreamUrl,
-  });
+  const response = NextResponse.json(result);
 
   response.headers.set(
     'Cache-Control',
